@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Philippines ESOs Ecosystem Mapping</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+  <style>
+    :root { --villgro: #08842a; }
+    .brand { color: var(--villgro); }
+    .brand-bg { background-color: var(--villgro); }
+    .brand-border { border-color: var(--villgro); }
+    .pill { border: 1px solid rgba(8,132,42,0.2); border-radius: 9999px; padding: 0.25rem 0.5rem; }
+    .pill.active { background: rgba(8,132,42,0.08); border-color: var(--villgro); }
+    #map { height: 60vh; min-height: 460px; position: relative; z-index: 0; }
+    .leaflet-popup-content { max-width: 260px; }
+    .shadow-soft { box-shadow: 0 10px 25px rgba(0,0,0,0.08); }
+    .card { border-radius: 1rem; }
+    .link { color: #0b7ef4; }
+    :focus-visible { outline: 2px dashed var(--villgro); outline-offset: 2px; }
+    header.sticky { z-index: 1000 !important; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <header class="bg-white shadow-sm sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-2">
+      <h1 class="text-2xl md:text-3xl font-semibold flex items-center gap-3">
+        <span class="inline-block brand-bg text-white rounded-xl px-3 py-1 text-base">Dashboard</span>
+        <span>Philippines ESOs Ecosystem Mapping</span>
+      </h1>
+      <p class="text-sm md:text-base text-gray-600 leading-snug">
+        This dashboard maps key ESOs in the Philippines and Southeast Asia, covering type, sector, stage, gender lens, and programs. It supports Villgro’s work in tracking ecosystem partners for women-led and impact-driven enterprises.
+      </p>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <aside class="lg:col-span-1 space-y-4">
+      <section class="bg-white card shadow-soft p-4">
+        <h2 class="font-semibold mb-3">Load Data</h2>
+        <p class="text-sm text-gray-600 mb-3">
+          This page auto-loads built-in JSON (no upload). You can also upload the Excel (<em>2025 Villgro Mapping Ecosystem.xlsx</em>) if you want to override it.
+        </p>
+        <div class="flex flex-wrap gap-2 mb-2">
+          <button id="btnBuiltin" class="px-3 py-2 rounded-lg border brand-border text-sm hover:bg-green-50">Use Built-in Data</button>
+          <button id="btnDemo" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Use Demo Data</button>
+          <button id="btnClear" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Clear</button>
+        </div>
+        <label class="block">
+          <input id="fileInput" type="file" accept=".xlsx,.xls" class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
+        </label>
+        <div id="preloadStatus" class="text-xs text-gray-500 mt-2">
+          Tip: If hosting locally, use a local web server (not file://) so the JSON can be fetched.
+        </div>
+      </section>
+
+      <section class="bg-white card shadow-soft p-4">
+        <h2 class="font-semibold mb-3">Search & Filters</h2>
+        <div class="mb-3">
+          <label class="text-sm text-gray-600">Search</label>
+          <input id="searchInput" type="text" placeholder="Search by ESO, sector, program…" class="mt-1 w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-200 focus:border-green-400" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-sm text-gray-600">Type</label>
+            <select id="filterType" class="mt-1 w-full border rounded-lg px-2 py-2" multiple></select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">Stage</label>
+            <select id="filterStage" class="mt-1 w-full border rounded-lg px-2 py-2" multiple></select>
+          </div>
+          <div class="col-span-2">
+            <label class="text-sm text-gray-600">Sector</label>
+            <select id="filterSector" class="mt-1 w-full border rounded-lg px-2 py-2" multiple></select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">Area Type</label>
+            <select id="filterAreaType" class="mt-1 w-full border rounded-lg px-2 py-2" multiple>
+              <option value="country">Philippines</option>
+              <option value="region">Region</option>
+              <option value="province">Province</option>
+              <option value="city_muni">City/Municipality</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-600">Gender Lens</label>
+            <select id="filterGender" class="mt-1 w-full border rounded-lg px-2 py-2">
+              <option value="">Any</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button id="btnApply" class="px-3 py-2 rounded-lg brand-bg text-white text-sm">Apply</button>
+          <button id="btnReset" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Reset</button>
+          <button id="btnExport" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Export Filtered CSV</button>
+        </div>
+      </section>
+
+      <section class="bg-white card shadow-soft p-4">
+        <h2 class="font-semibold mb-2">Legend</h2>
+        <ul class="text-sm text-gray-600 space-y-1">
+          <li><span class="inline-block w-3 h-3 rounded-sm mr-2" style="background: rgba(8,132,42,.2); border: 2px solid var(--villgro);"></span> Highlighted coverage</li>
+          <li><span class="inline-block w-3 h-3 rounded-full mr-2 brand-bg"></span> ESO pin / centroid</li>
+        </ul>
+      </section>
+    </aside>
+
+    <section class="lg:col-span-3 space-y-4">
+      <div id="map" class="bg-white card shadow-soft"></div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-1 bg-white card shadow-soft p-4 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="font-semibold">Entrepreneur Support Orgs</h2>
+            <span id="countBadge" class="text-xs px-2 py-1 rounded-full brand-bg text-white">0</span>
+          </div>
+          <div id="esoList" class="overflow-auto" style="max-height: 60vh;"></div>
+        </div>
+
+        <div class="lg:col-span-2 bg-white card shadow-soft p-4">
+          <h2 class="font-semibold mb-3">Details</h2>
+          <div id="details" class="text-sm text-gray-700">
+            <p class="text-gray-500">Select an ESO from the list or click a marker on the map to see details here.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 text-xs text-gray-500">
+    <div>Basemap © <a class="underline" href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors. Built with Leaflet & SheetJS.</div>
+  </footer>
+
+  <script>
+    const villgroColor = '#08842a';
+    let map, highlightLayerGroup, markersGroup;
+    let detailsSheet = [];   // Sheet 1 rows (details)
+    let mapSheet = [];       // Sheet 2 rows (map-ready)
+    let merged = [];         // Details + map merged by ESO
+    let currentFilters = { text: '', types: [], sectors: [], stages: [], areaTypes: [], gender: '' };
+
+    function labelAreaType(t){
+      const m = { country: 'Philippines', region: 'Region', province: 'Province', city_muni: 'City/Municipality' };
+      return m[(t||'').toLowerCase()] || t;
+    }
+
+    const REGION_CENTROIDS = {
+      '0100000000':[16.0,120.5], '0200000000':[17.2,121.7], '0300000000':[15.0,120.9], '0400000000':[14.1,121.2],
+      '0500000000':[13.4,123.5], '0600000000':[11.0,122.5], '0700000000':[9.7,123.9],  '0800000000':[11.2,124.9],
+      '0900000000':[7.3,122.1],  '1000000000':[8.3,124.7],  '1100000000':[7.1,125.6],  '1200000000':[6.9,124.7],
+      '1300000000':[14.6,121.0], '1400000000':[17.0,121.0], '1600000000':[8.6,125.9],  '1700000000':[12.5,121.0],
+      '1900000000':[7.2,124.3]
+    };
+
+    const CITY_CENTROIDS = {
+      '137404000':[14.6760,121.0437], '137602000':[14.5547,121.0244], '137403000':[14.5760,121.0850],
+      '133900000':[14.5995,120.9842], '137607000':[14.5176,121.0509], '072217000':[10.3157,123.8854],
+      '043403000':[14.3430,121.0810], '041031000':[14.0836,121.1497]
+    };
+
+    const PH_CENTER = [12.8797, 121.7740];
+    const PH_BOUNDS = [[4.5,116.5],[21.2,127.0]];
+
+    function initMap() {
+      map = L.map('map', { worldCopyJump: true }).setView(PH_CENTER, 5.6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      highlightLayerGroup = L.layerGroup().addTo(map);
+      markersGroup = L.layerGroup().addTo(map);
+    }
+
+    const toKey = s => (s||'').toString().trim().toLowerCase();
+    function csvEscape(val){ if (val == null) return ''; const s = String(val); return /[",\\n]/.test(s) ? '\"' + s.replace(/\"/g,'\"\"') + '\"' : s; }
+    function arrayify(val){ if (!val) return []; if (Array.isArray(val)) return val; return String(val).split(/[,;/\\n]/).map(s=>s.trim()).filter(Boolean); }
+    function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
+    function buildOptions(el, values){ el.innerHTML=''; uniq(values).sort((a,b)=>a.localeCompare(b)).forEach(v=>{ const o=document.createElement('option'); o.value=v;o.textContent=v;el.appendChild(o); }); }
+
+    function applyFilters(){
+      const text=currentFilters.text.toLowerCase(), tset=new Set(currentFilters.types), sset=new Set(currentFilters.sectors), stset=new Set(currentFilters.stages), atset=new Set(currentFilters.areaTypes), gender=(currentFilters.gender||'').toLowerCase();
+      return merged.filter(row=>{
+        const hay=[row.ESO,row.Type,row.Sectors,row.Programs,row.Stage].map(x=>(x||'').toLowerCase()).join(' | ');
+        if (text && !hay.includes(text)) return false;
+        if (tset.size && !arrayify(row.Type).some(v=>tset.has(v))) return false;
+        if (sset.size && !arrayify(row.Sectors).some(v=>sset.has(v))) return false;
+        if (stset.size && !arrayify(row.Stage).some(v=>stset.has(v))) return false;
+        if (atset.size && !atset.has((row.AreaType||'').toLowerCase())) return false;
+        if (gender && (String(row['Gender Lens']||'').toLowerCase()!==gender.toLowerCase())) return false;
+        return true;
+      });
+    }
+
+    function renderList(rows){
+      const list=document.getElementById('esoList'); list.innerHTML='';
+      document.getElementById('countBadge').textContent=rows.length;
+      rows.sort((a,b)=>a.ESO.localeCompare(b.ESO)).forEach(row=>{
+        const btn=document.createElement('button');
+        btn.className='w-full text-left px-3 py-2 rounded-lg hover:bg-green-50 focus:bg-green-50 border border-transparent hover:border-green-100 mb-1';
+        btn.innerHTML=`<div class=\"font-medium\">${row.ESO||'—'}</div><div class=\"text-xs text-gray-500 truncate\">${row.Type||''} • ${row.Sectors||''}</div>`;
+        btn.addEventListener('click',()=>selectESO(row.ESO)); list.appendChild(btn);
+      });
+    }
+
+    function renderDetails(row){
+      const wrap=document.getElementById('details');
+      if(!row){ wrap.innerHTML='<p class=\"text-gray-500\">Select an ESO from the list or click a marker on the map to see details here.</p>'; return; }
+      const fields=[['About','About'],['Flagship Program/s','Flagship Programs'],['Provides Funding','Provides Funding'],['Funding Type','Funding Type'],['Portfolio Enterprises','Portfolio Enterprises'],['Programs','Programs'],['Type','Type'],['Sectors','Sectors'],['Stage','Stage'],['Gender Lens','Gender Lens'],['Website','Website'],['Email','Email'],['Contact','Contact'],['Notes','Notes']];
+      let html=`<div class=\"flex items-start justify-between gap-2\"><div><h3 class=\"text-xl font-semibold\">${row.ESO||''}</h3><div class=\"text-xs text-gray-500\">Area: <span class=\"font-medium\">${labelAreaType(row.AreaType)||''}</span> — ${row.AreaNames||''}</div></div><a class=\"pill active text-sm link\" target=\"_blank\" rel=\"noreferrer\" href=\"${row.Website||row.SourceURL||'#'}\">Visit site</a></div>`;
+      html+='<div class=\"mt-3 grid grid-cols-1 md:grid-cols-2 gap-3\">';
+      fields.forEach(([label,key])=>{ const val=row[key]; if(!val) return; const display=(key==='Website')?`<a class=\"underline\" href=\"${val}\" target=\"_blank\" rel=\"noreferrer\">${val}</a>`:val; html+=`<div class=\"bg-gray-50 rounded-lg p-3\"><div class=\"text-xs text-gray-500\">${label}</div><div class=\"text-sm\">${display}</div></div>`; });
+      html+='</div>';
+      const shown=new Set(fields.map(f=>f[1]).concat(['ESO','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','SourceURL']));
+      const extras=Object.keys(row).filter(k=>row[k] && !shown.has(k));
+      if(extras.length){ html+='<div class=\"mt-4\"><h4 class=\"font-semibold mb-2\">More</h4><div class=\"grid grid-cols-1 md:grid-cols-2 gap-3\">'; extras.forEach(k=>{ html+=`<div class=\"bg-gray-50 rounded-lg p-3\"><div class=\"text-xs text-gray-500\">${k}</div><div class=\"text-sm\">${row[k]}</div></div>`; }); html+='</div></div>'; }
+      wrap.innerHTML=html;
+    }
+
+    function clearMap(){ highlightLayerGroup.clearLayers(); markersGroup.clearLayers(); }
+
+    async function shadePhilippines(){
+      const SOURCES=['https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM0/PHL/geoBoundariesCGAZ_ADM0.geojson','https://raw.githubusercontent.com/wmgeolab/geoBoundaries/gh-pages/releaseData/geoBoundariesCGAZ_ADM0/PHL/geoBoundariesCGAZ_ADM0.geojson'];
+      if(!window.__PH_GEOJSON__){ for(const url of SOURCES){ try{ const r=await fetch(url,{mode:'cors'}); if(r.ok){ window.__PH_GEOJSON__=await r.json(); break; } }catch(e){} } }
+      if(window.__PH_GEOJSON__){ const layer=L.geoJSON(window.__PH_GEOJSON__,{style:{color:villgroColor,weight:2,fillOpacity:0.15}}).addTo(highlightLayerGroup); map.fitBounds(layer.getBounds(),{padding:[20,20]}); return layer; }
+      const rect=L.rectangle(PH_BOUNDS,{color:villgroColor,weight:2,fillOpacity:0.15}).addTo(highlightLayerGroup); map.fitBounds(rect.getBounds(),{padding:[20,20]}); return rect;
+    }
+
+    function pin(lat,lon,label,eso){ if(lat==null || lon==null) return null; const m=L.circleMarker([+lat,+lon],{radius:7,weight:2,color:villgroColor,fillColor:villgroColor,fillOpacity:0.8}).addTo(markersGroup).bindPopup(`<div class='text-sm'><div class='font-semibold mb-1'>${eso||label||'ESO'}</div><div>${label||''}</div></div>`); m.on('click',()=>selectESO(eso)); return m; }
+    function circle(lat,lon,radiusKm=50){ if(lat==null || lon==null) return null; return L.circle([+lat,+lon],{radius:radiusKm*1000,weight:2,color:villgroColor,fillColor:villgroColor,fillOpacity:0.12}).addTo(highlightLayerGroup); }
+
+    async function selectESO(esoName){
+      const row=merged.find(r=>toKey(r.ESO)===toKey(esoName)); if(!row) return; renderDetails(row); clearMap();
+      const areaType=(row.AreaType||'').toLowerCase(); const codes=String(row.PSGC_Codes||'').split(/[,;\\s]+/).filter(Boolean); const lats=arrayify(row.Pin_Lat).map(Number); const lons=arrayify(row.Pin_Lon).map(Number);
+      let bounds=[];
+      if(areaType==='country'){ await shadePhilippines(); pin(PH_CENTER[0],PH_CENTER[1],'Philippines',row.ESO); }
+      if(areaType==='region' && codes.length){ codes.forEach(code=>{ const c=REGION_CENTROIDS[code]; if(c){ circle(c[0],c[1],120); const mk=pin(c[0],c[1],`Region Code ${code}`,row.ESO); if(mk) bounds.push(mk.getLatLng()); } }); }
+      if(areaType==='city_muni' || areaType==='province'){ if(lats.length && lons.length && lats.length===lons.length){ lats.forEach((la,i)=>{ const mk=pin(la,lons[i],row.AreaNames,row.ESO); circle(la,lons[i],8); if(mk) bounds.push(mk.getLatLng()); }); } else if(codes.length){ codes.forEach(code=>{ const c=CITY_CENTROIDS[code]||REGION_CENTROIDS[code]; if(c){ const mk=pin(c[0],c[1],`${row.AreaNames}`,row.ESO); circle(c[0],c[1],areaType==='province'?30:10); if(mk) bounds.push(mk.getLatLng()); } }); } }
+      if(!highlightLayerGroup.getLayers().length && lats.length && lons.length){ const mk=pin(lats[0],lons[0],row.AreaNames,row.ESO); circle(lats[0],lons[0],10); if(mk) bounds.push(mk.getLatLng()); }
+      if(Array.isArray(bounds) && bounds.length){ const latlngs=bounds.map(ll=>L.latLng(ll.lat||ll[0], ll.lng||ll[1])); const bb=L.latLngBounds(latlngs); map.fitBounds(bb.pad(0.25)); }
+    }
+
+    function normalizeColumns(obj){ const out={}; for(const k in obj){ if(!Object.hasOwn(obj,k)) continue; const nk=k.replace(/\\s+/g,' ').trim(); out[nk]=obj[k]; } return out; }
+    function mergeRows(details,mapping){ const byName=new Map(); details.forEach(r=>{ const name=String(r.ESO||r['ESO Name']||r['Name']||'').trim(); if(!name) return; byName.set(name.toLowerCase(),{...r,ESO:name}); }); const output=[]; mapping.forEach(m=>{ const name=String(m.ESO||'').trim(); if(!name) return; const base=byName.get(name.toLowerCase())||{ESO:name}; output.push({...base,...m}); }); return output; }
+    function populateFilters(rows){ const types=uniq(rows.flatMap(r=>arrayify(r.Type))); const sectors=uniq(rows.flatMap(r=>arrayify(r.Sectors))); const stages=uniq(rows.flatMap(r=>arrayify(r.Stage))); buildOptions(document.getElementById('filterType'),types); buildOptions(document.getElementById('filterSector'),sectors); buildOptions(document.getElementById('filterStage'),stages); }
+    function exportCSV(rows){ const cols=['ESO','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','Notes','SourceURL']; const head=cols.join(','); const lines=rows.map(r=>cols.map(c=>csvEscape(r[c])).join(',')); const csv=[head].concat(lines).join('\\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='philippines_esos_map_ready.csv'; a.click(); URL.revokeObjectURL(url); }
+
+    async function tryPreloadBuiltins(){
+      try{
+        const [d,a]=await Promise.all([fetch('esos_details.json',{cache:'no-store'}), fetch('esos_area.json',{cache:'no-store'})]);
+        if(!d.ok || !a.ok) throw new Error('Built-in JSON not found');
+        detailsSheet=await d.json(); mapSheet=await a.json();
+        merged=mergeRows(detailsSheet,mapSheet); populateFilters(merged); renderList(merged);
+        document.getElementById('btnApply').click();
+        document.getElementById('preloadStatus').textContent='Loaded built-in JSON data.';
+      }catch(err){
+        document.getElementById('preloadStatus').textContent='Tip: Place esos_details.json and esos_area.json next to this HTML to preload data without uploads.';
+      }
+    }
+
+    document.getElementById('btnApply').addEventListener('click', async ()=>{
+      const sel=el=>Array.from(el.selectedOptions).map(o=>o.value);
+      currentFilters.text=document.getElementById('searchInput').value||'';
+      currentFilters.types=sel(document.getElementById('filterType'));
+      currentFilters.sectors=sel(document.getElementById('filterSector'));
+      currentFilters.stages=sel(document.getElementById('filterStage'));
+      currentFilters.areaTypes=sel(document.getElementById('filterAreaType'));
+      currentFilters.gender=document.getElementById('filterGender').value||'';
+      const rows=applyFilters(); renderList(rows);
+      clearMap();
+      for(const r of rows){
+        const areaType=(r.AreaType||'').toLowerCase(); const codes=String(r.PSGC_Codes||'').split(/[,;\\s]+/).filter(Boolean); const la=parseFloat(r.Pin_Lat), lo=parseFloat(r.Pin_Lon);
+        if(areaType==='country'){ await shadePhilippines(); }
+        if(!isNaN(la) && !isNaN(lo)) pin(la,lo,r.AreaNames,r.ESO);
+        else if(areaType==='region' && codes.length){ codes.forEach(code=>{ const c=REGION_CENTROIDS[code]; if(c) pin(c[0],c[1],`Region ${code}`,r.ESO); }); }
+        else if(codes.length){ codes.forEach(code=>{ const c=CITY_CENTROIDS[code]; if(c) pin(c[0],c[1],r.AreaNames,r.ESO); }); }
+      }
+    });
+
+    document.getElementById('btnReset').addEventListener('click', ()=>{
+      currentFilters={ text:'', types:[], sectors:[], stages:[], areaTypes:[], gender:'' };
+      document.getElementById('searchInput').value='';
+      ['filterType','filterSector','filterStage','filterAreaType'].forEach(id=>{ const el=document.getElementById(id); Array.from(el.options).forEach(o=>o.selected=false); });
+      document.getElementById('filterGender').value=''; renderList(merged); clearMap();
+    });
+
+    document.getElementById('btnExport').addEventListener('click', ()=>{ exportCSV(applyFilters()); });
+    document.getElementById('btnClear').addEventListener('click', ()=>{ detailsSheet=[]; mapSheet=[]; merged=[]; renderList([]); renderDetails(null); clearMap(); document.getElementById('fileInput').value=''; populateFilters([]); });
+    document.getElementById('btnBuiltin').addEventListener('click', ()=>{ tryPreloadBuiltins(); });
+
+    document.getElementById('btnDemo').addEventListener('click', ()=>{
+      detailsSheet=[
+        { ESO:'Startup QC (Quezon City)', Type:'Government Program', Sectors:'General', Stage:'Idea, Early', 'Gender Lens':'No', Website:'https://quezoncity.gov.ph/program/start-up-qc-program/', About:'LGU program offering equity-free grants to QC-based startups', Programs:'Grants; Mentorship', 'Flagship Programs':'StartUp QC Grants', 'Provides Funding':'Yes', 'Funding Type':'Grants', 'Portfolio Enterprises':'—' },
+        { ESO:'Navigatú TBI (Caraga State U)', Type:'University TBI', Sectors:'General', Stage:'Early', 'Gender Lens':'No', Website:'https://www.facebook.com/navigatu.org', About:'Caraga State University technology business incubator', Programs:'Incubation; Mentoring', 'Provides Funding':'No' },
+        { ESO:'Manila Angel Investors Network (MAIN.PH)', Type:'Angel Network', Sectors:'Cross-sector', Stage:'Seed, Early', 'Gender Lens':'Yes', Website:'https://main.ph', About:'Nationwide angel investor network', Programs:'Investment; Mentorship', 'Provides Funding':'Yes', 'Funding Type':'Angel Investment' }
+      ];
+      mapSheet=[
+        { ESO:'Startup QC (Quezon City)', AreaType:'city_muni', AreaNames:'Quezon City', PSGC_Codes:'137404000', Pin_Lat:'14.6760', Pin_Lon:'121.0437', Notes:'LGU-led program', SourceURL:'https://quezoncity.gov.ph/program/start-up-qc-program/' },
+        { ESO:'Navigatú TBI (Caraga State U)', AreaType:'region', AreaNames:'Caraga (Region XIII)', PSGC_Codes:'1600000000', Notes:'Regional TBI', SourceURL:'https://www.facebook.com/navigatu.org' },
+        { ESO:'Manila Angel Investors Network (MAIN.PH)', AreaType:'country', AreaNames:'Philippines', PSGC_Codes:'PH', Notes:'Nationwide network', SourceURL:'https://main.ph' }
+      ];
+      merged=mergeRows(detailsSheet,mapSheet); populateFilters(merged); renderList(merged); document.getElementById('btnApply').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', async (evt)=>{
+      const file=evt.target.files[0]; if(!file) return;
+      const data=await file.arrayBuffer(); const wb=XLSX.read(data,{type:'array'});
+      const sheet1=wb.SheetNames[0]; const sheet2=wb.SheetNames[1]; if(!sheet1 || !sheet2){ alert('Workbook must have at least two sheets: (1) ESO details, (2) Map-ready outputs.'); return; }
+      const s1=XLSX.utils.sheet_to_json(wb.Sheets[sheet1],{defval:''}).map(normalizeColumns);
+      const s2=XLSX.utils.sheet_to_json(wb.Sheets[sheet2],{defval:''}).map(normalizeColumns);
+      detailsSheet=s1.map(r=>({ ESO:r.ESO||r['ESO Name']||r['Name']||r['Organization']||'', Type:r.Type||r['ESO Type']||r['Type(s)']||r['Type of ESO']||'', Sectors:r.Sectors||r['Sector']||r['Sectors Covered']||r['Sector Focus']||r['Focus Sectors']||r['Focus Sector(s)']||r['Industries']||r['Industry']||r['Verticals']||r['Sector(s)']||r['Sector/Focus']||'', Stage:r.Stage||r['Stages']||r['Stage Focus']||'', 'Gender Lens':r['Gender Lens']||r['Gender-Lens']||r['Gender-lens']||r['Gender']||'', Programs:r.Programs||r['Programs and Initiatives']||r['Program(s)']||r['Programs Offered']||'', About:r.About||r['About / Description']||r['Description']||'', Website:r.Website||r['Website / Link']||r['Link']||'', Email:r.Email||r['Contact Email']||'', Contact:r.Contact||r['Contact Person']||'', 'Flagship Programs':r['Flagship Program/s']||r['Flagship Programs']||r['Flagship Program']||r['Flagship']||'', 'Provides Funding':r['Provides Funding']||r['Provide Funding']||r['Funding Provided']||r['Funding?']||r['Funding (Yes/No)']||r['Funding']||'', 'Funding Type':r['Funding Type']||r['Type of Funding']||r['Funding Types']||'', 'Portfolio Enterprises':r['Portfolio Enterprises']||r['Portfolio']||r['Portfolio Companies']||'' }));
+      mapSheet=s2.map(r=>({ ESO:r.ESO||r['ESO Name']||r['Name']||'', AreaType:(r.AreaType||r['Area Type']||'').toString().toLowerCase(), AreaNames:r.AreaNames||r['Area Names']||r['Area']||'', PSGC_Codes:r.PSGC_Codes||r['PSGC Codes']||r['PSGC']||r['Code']||'', Pin_Lat:r.Pin_Lat||r['Lat']||r['Latitude']||'', Pin_Lon:r.Pin_Lon||r['Lon']||r['Longitude']||'', Notes:r.Notes||r['Notes / Remarks']||'', SourceURL:r.SourceURL||r['Source URL']||r['URL']||r['Link']||'' }));
+      merged=mergeRows(detailsSheet,mapSheet); populateFilters(merged); renderList(merged); clearMap();
+    });
+
+    function normalizeColumns(obj){ const out={}; for(const k in obj){ if(!Object.hasOwn(obj,k)) continue; const nk=k.replace(/\\s+/g,' ').trim(); out[nk]=obj[k]; } return out; }
+
+    initMap(); tryPreloadBuiltins(); feather.replace();
+  </script>
+</body>
+</html>

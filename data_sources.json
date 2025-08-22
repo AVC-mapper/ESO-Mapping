@@ -1,0 +1,7 @@
+{
+  "mode": "gsheets",
+  "gsheets": {
+    "detailsCSV": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQGceCe_vS-Mr4qbISi4F6hIqAMRXfRG9BGhU3oXv2yWKLgYQ-TDzJFsk0qtd3NXMiIfb5rJ8gb1MWq/pub?gid=0&single=true&output=csv",
+    "areaCSV": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQGceCe_vS-Mr4qbISi4F6hIqAMRXfRG9BGhU3oXv2yWKLgYQ-TDzJFsk0qtd3NXMiIfb5rJ8gb1MWq/pub?gid=1603746211&single=true&output=csv"
+  }
+}

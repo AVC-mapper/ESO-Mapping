@@ -9,7 +9,7 @@
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- SheetJS for CSV/Excel parsing -->
+  <!-- SheetJS for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Icons -->
   <script src="https://unpkg.com/feather-icons"></script>
@@ -46,23 +46,18 @@
   <!-- Main -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
 
-    <!-- Sidebar: Controls -->
+    <!-- Sidebar -->
     <aside class="lg:col-span-1 space-y-4">
+      <!-- Legend (moved to top) -->
       <section class="bg-white card shadow-soft p-4">
-        <h2 class="font-semibold mb-3">Load Data</h2>
-        <p class="text-sm text-gray-600 mb-3">
-          This page auto-loads from <code>data_sources.json</code> (Google Sheets CSV or built-in JSON). You can also upload the Excel workbook to override at runtime.
-        </p>
-        <label class="block">
-          <input id="fileInput" type="file" accept=".xlsx,.xls" class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
-        </label>
-        <div id="preloadStatus" class="text-xs text-gray-500 mt-2">Looking for <code>data_sources.json</code>…</div>
-        <div class="mt-3 flex gap-2">
-          <button id="btnDemo" class="px-3 py-2 rounded-lg border brand-border text-sm hover:bg-green-50">Use Demo Data</button>
-          <button id="btnClear" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Clear</button>
-        </div>
+        <h2 class="font-semibold mb-2">Legend</h2>
+        <ul class="text-sm text-gray-600 space-y-1">
+          <li><span class="inline-block w-3 h-3 rounded-sm mr-2" style="background: rgba(8,132,42,.2); border: 2px solid var(--villgro);"></span> Highlighted coverage</li>
+          <li><span class="inline-block w-3 h-3 rounded-full mr-2 brand-bg"></span> ESO pin / centroid</li>
+        </ul>
       </section>
 
+      <!-- Search & Filters -->
       <section class="bg-white card shadow-soft p-4">
         <h2 class="font-semibold mb-3">Search & Filters</h2>
         <div class="mb-3">
@@ -104,16 +99,14 @@
         <div class="mt-3 flex flex-wrap gap-2">
           <button id="btnApply" class="px-3 py-2 rounded-lg brand-bg text-white text-sm">Apply</button>
           <button id="btnReset" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Reset</button>
-          <button id="btnExport" class="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50">Export Filtered CSV</button>
         </div>
       </section>
 
+      <!-- Data status (no upload/demo; just date updated) -->
       <section class="bg-white card shadow-soft p-4">
-        <h2 class="font-semibold mb-2">Legend</h2>
-        <ul class="text-sm text-gray-600 space-y-1">
-          <li><span class="inline-block w-3 h-3 rounded-sm mr-2" style="background: rgba(8,132,42,.2); border: 2px solid var(--villgro);"></span> Highlighted coverage</li>
-          <li><span class="inline-block w-3 h-3 rounded-full mr-2 brand-bg"></span> ESO pin / centroid</li>
-        </ul>
+        <h2 class="font-semibold mb-1">Data</h2>
+        <div id="dataUpdated" class="text-sm text-gray-700">Date updated: —</div>
+        <div id="preloadStatus" class="text-xs text-gray-500 mt-1">Loading…</div>
       </section>
     </aside>
 
@@ -194,7 +187,7 @@
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
       highlightLayerGroup = L.layerGroup().addTo(map);
@@ -303,7 +296,7 @@
       });
       html += '</div>';
 
-      // Show raw attributes not yet shown
+      // Show any remaining attributes
       const shown = new Set(fieldsPreferred.map(f=>f[1]).concat(['ESO','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','SourceURL']));
       const extras = Object.keys(row).filter(k=>row[k] && !shown.has(k));
       if (extras.length) {
@@ -335,7 +328,7 @@
       ];
       if (!window.__PH_GEOJSON__) {
         for (const url of SOURCES) {
-          try { const r = await fetch(url, { mode: 'cors' }); if (r.ok) { window.__PH_GEOJSON__ = await r.json(); break; } } catch(e) { /* try next */ }
+          try { const r = await fetch(url, { mode: 'cors' }); if (r.ok) { window.__PH_GEOJSON__ = await r.json(); break; } } catch(e) {}
         }
       }
       if (window.__PH_GEOJSON__) {
@@ -343,7 +336,6 @@
         map.fitBounds(layer.getBounds(), { padding: [20,20] });
         return layer;
       } else {
-        // fallback rectangle
         const rect = L.rectangle(PH_BOUNDS, { color: villgroColor, weight: 2, fillOpacity: 0.15 }).addTo(highlightLayerGroup);
         map.fitBounds(rect.getBounds(), { padding: [20,20] });
         return rect;
@@ -380,7 +372,6 @@
       renderDetails(row);
       clearMap();
 
-      // Determine highlighting logic
       const areaType = (row.AreaType||'').toLowerCase();
       const codes = String(row.PSGC_Codes||'').split(/[,;\s]+/).filter(Boolean);
       const lats = arrayify(row.Pin_Lat).map(Number);
@@ -407,7 +398,6 @@
       }
 
       if (areaType === 'city_muni' || areaType === 'province') {
-        // Prefer explicit pins
         if (lats.length && lons.length && lats.length === lons.length) {
           lats.forEach((la, i) => {
             const mk = pin(la, lons[i], row.AreaNames, row.ESO);
@@ -426,14 +416,12 @@
         }
       }
 
-      // Fallback: if nothing placed, try to pin any provided coordinates
       if (!highlightLayerGroup.getLayers().length && lats.length && lons.length) {
         const mk = pin(lats[0], lons[0], row.AreaNames, row.ESO);
         circle(lats[0], lons[0], 10);
         if (mk) bounds.push(mk.getLatLng());
       }
 
-      // Fit bounds if we collected points
       if (Array.isArray(bounds) && bounds.length) {
         const latlngs = bounds.map(ll => L.latLng(ll.lat || ll[0], ll.lng || ll[1]));
         const bb = L.latLngBounds(latlngs);
@@ -482,18 +470,6 @@
       buildOptions(document.getElementById('filterStage'), stages);
     }
 
-    function exportCSV(rows) {
-      const cols = ['ESO','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','Notes','SourceURL'];
-      const head = cols.join(',');
-      const lines = rows.map(r => cols.map(c => csvEscape(r[c])).join(','));
-      const csv = [head].concat(lines).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'philippines_esos_map_ready.csv'; a.click();
-      URL.revokeObjectURL(url);
-    }
-
     // =====================
     // Data sources: Built-in JSON + Google Sheets (CSV) via data_sources.json
     // =====================
@@ -510,17 +486,40 @@
         populateFilters(merged);
         renderList(merged);
         document.getElementById('btnApply').click();
-        const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'Loaded built-in JSON data.';
+        setStatus('Loaded data.');
+        setUpdated(new Date());
       } catch(err) {
-        const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'Tip: Add esos_details.json & esos_area.json or configure data_sources.json.';
+        setStatus('Tip: Add esos_details.json & esos_area.json or configure data_sources.json.');
+      }
+    }
+
+    function setStatus(msg){
+      const s = document.getElementById('preloadStatus');
+      if (s) s.textContent = msg;
+    }
+    function setUpdated(d){
+      const el = document.getElementById('dataUpdated');
+      if (!el) return;
+      try {
+        el.textContent = 'Date updated: ' + (new Date(d)).toLocaleString();
+      } catch(_) {
+        el.textContent = 'Date updated: —';
       }
     }
 
     async function tryLoadGoogleSheets(detailsCSV, areaCSV){
+      // cache-bust
       const b1 = (detailsCSV.includes('?') ? '&' : '?') + '_ts=' + Date.now();
       const b2 = (areaCSV.includes('?') ? '&' : '?') + '_ts=' + Date.now();
       const [d,a] = await Promise.all([ fetch(detailsCSV + b1), fetch(areaCSV + b2) ]);
-      if(!d.ok || !a.ok) throw new Error('Google Sheets CSV not reachable');
+      if(!d.ok || !a.ok) throw new Error('CSV not reachable');
+
+      // Try to read Last-Modified headers (may be absent due to CORS)
+      const lm1 = d.headers.get('last-modified');
+      const lm2 = a.headers.get('last-modified');
+      const updated = (lm1 || lm2) ? new Date(Math.max(lm1?Date.parse(lm1):0, lm2?Date.parse(lm2):0)) : new Date();
+      setUpdated(updated);
+
       const dtext = await d.text();
       const atext = await a.text();
       const dwb = XLSX.read(dtext, { type:'string' });
@@ -560,13 +559,13 @@
       populateFilters(merged);
       renderList(merged);
       document.getElementById('btnApply').click();
-      const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'Loaded data from Google Sheets.';
+      setStatus('Loaded data.');
     }
 
     async function tryLoadFromConfig(){
       try {
         const r = await fetch('data_sources.json', { cache: 'no-store' });
-        if (!r.ok) { const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'No data_sources.json found; trying built-in JSON…'; return tryPreloadBuiltins(); }
+        if (!r.ok) { setStatus('No data_sources.json found; trying built-in data…'); return tryPreloadBuiltins(); }
         const cfg = await r.json();
         if (cfg.mode === 'gsheets' && cfg.gsheets?.detailsCSV && cfg.gsheets?.areaCSV) {
           return tryLoadGoogleSheets(cfg.gsheets.detailsCSV, cfg.gsheets.areaCSV);
@@ -574,7 +573,7 @@
         // fallback to built-in JSON next to index.html
         return tryPreloadBuiltins();
       } catch(e) {
-        const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'Could not load config; falling back to built-in JSON.';
+        setStatus('Could not load config; falling back to built-in data.');
         return tryPreloadBuiltins();
       }
     }
@@ -584,12 +583,13 @@
     // =====================
     document.getElementById('btnApply').addEventListener('click', async ()=>{
       const sel = el => Array.from(el.selectedOptions).map(o => o.value);
-      currentFilters.text = document.getElementById('searchInput').value || '';
-      currentFilters.types = sel(document.getElementById('filterType'));
-      currentFilters.sectors = sel(document.getElementById('filterSector'));
+      currentFilters.text   = document.getElementById('searchInput').value || '';
+      currentFilters.types  = sel(document.getElementById('filterType'));
+      currentFilters.sectors= sel(document.getElementById('filterSector'));
       currentFilters.stages = sel(document.getElementById('filterStage'));
       currentFilters.areaTypes = sel(document.getElementById('filterAreaType'));
       currentFilters.gender = document.getElementById('filterGender').value || '';
+
       const rows = applyFilters();
       renderList(rows);
 
@@ -620,114 +620,9 @@
       clearMap();
     });
 
-    document.getElementById('btnExport').addEventListener('click', ()=>{
-      exportCSV(applyFilters());
-    });
-
-    document.getElementById('btnClear').addEventListener('click', ()=>{
-      detailsSheet = []; mapSheet = []; merged = [];
-      renderList([]); renderDetails(null); clearMap();
-      document.getElementById('fileInput').value = '';
-      populateFilters([]);
-      const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'Cleared in-memory data.';
-    });
-
-    // Demo minimal dataset + self-tests
-    document.getElementById('btnDemo').addEventListener('click', ()=>{
-      detailsSheet = [
-        { ESO:'Startup QC (Quezon City)', Type:'Government Program', Sectors:'General', Stage:'Idea, Early', 'Gender Lens':'No', Website:'https://quezoncity.gov.ph/program/start-up-qc-program/', About:'LGU program offering equity-free grants to QC-based startups', Programs:'Grants; Mentorship', 'Flagship Programs':'StartUp QC Grants', 'Provides Funding':'Yes', 'Funding Type':'Grants', 'Portfolio Enterprises':'—' },
-        { ESO:'Navigatú TBI (Caraga State U)', Type:'University TBI', Sectors:'General', Stage:'Early', 'Gender Lens':'No', Website:'https://www.facebook.com/navigatu.org', About:'Caraga State University technology business incubator', Programs:'Incubation; Mentoring', 'Provides Funding':'No' },
-        { ESO:'Manila Angel Investors Network (MAIN.PH)', Type:'Angel Network', Sectors:'Cross-sector', Stage:'Seed, Early', 'Gender Lens':'Yes', Website:'https://main.ph', About:'Nationwide angel investor network', Programs:'Investment; Mentorship', 'Provides Funding':'Yes', 'Funding Type':'Angel Investment' }
-      ];
-      mapSheet = [
-        { ESO:'Startup QC (Quezon City)', AreaType:'city_muni', AreaNames:'Quezon City', PSGC_Codes:'137404000', Pin_Lat:'14.6760', Pin_Lon:'121.0437', Notes:'LGU-led program', SourceURL:'https://quezoncity.gov.ph/program/start-up-qc-program/' },
-        { ESO:'Navigatú TBI (Caraga State U)', AreaType:'region', AreaNames:'Caraga (Region XIII)', PSGC_Codes:'1600000000', Notes:'Regional TBI', SourceURL:'https://www.facebook.com/navigatu.org' },
-        { ESO:'Manila Angel Investors Network (MAIN.PH)', AreaType:'country', AreaNames:'Philippines', PSGC_Codes:'PH', Notes:'Nationwide network', SourceURL:'https://main.ph' }
-      ];
-      merged = mergeRows(detailsSheet, mapSheet);
-      populateFilters(merged);
-      renderList(merged);
-      document.getElementById('btnApply').click();
-      runSelfTests();
-      const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'Loaded demo data.';
-    });
-
-    // Handle file upload
-    document.getElementById('fileInput').addEventListener('change', async (evt)=>{
-      const file = evt.target.files[0];
-      if (!file) return;
-      const data = await file.arrayBuffer();
-      const wb = XLSX.read(data, { type: 'array' });
-
-      // Take the first two sheets by index (Sheet 1 = details, Sheet 2 = map-ready)
-      const sheet1 = wb.SheetNames[0];
-      const sheet2 = wb.SheetNames[1];
-      if (!sheet1 || !sheet2) {
-        alert('The workbook must have at least two sheets: (1) ESO details, (2) Map-ready outputs.');
-        return;
-      }
-      const s1 = XLSX.utils.sheet_to_json(wb.Sheets[sheet1], { defval: '' }).map(normalizeColumns);
-      const s2 = XLSX.utils.sheet_to_json(wb.Sheets[sheet2], { defval: '' }).map(normalizeColumns);
-
-      // Standardize likely column names
-      detailsSheet = s1.map(r => ({
-        ESO: r.ESO || r['ESO Name'] || r['Name'] || r['Organization'] || '',
-        Type: r.Type || r['ESO Type'] || r['Type(s)'] || r['Type of ESO'] || '',
-        // Sectors from a wide range of headers including your Sheet1 Column G: "Sector/Focus"
-        Sectors: r.Sectors || r['Sector'] || r['Sectors Covered'] || r['Sector Focus'] || r['Focus Sectors'] || r['Focus Sector(s)'] || r['Industries'] || r['Industry'] || r['Verticals'] || r['Sector(s)'] || r['Sector/Focus'] || '',
-        Stage: r.Stage || r['Stages'] || r['Stage Focus'] || '',
-        'Gender Lens': r['Gender Lens'] || r['Gender-Lens'] || r['Gender'] || '',
-        Programs: r.Programs || r['Program(s)'] || r['Programs Offered'] || '',
-        About: r.About || r['About / Description'] || r['Description'] || '',
-        Website: r.Website || r['Website / Link'] || r['Link'] || '',
-        Email: r.Email || r['Contact Email'] || '',
-        Contact: r.Contact || r['Contact Person'] || '',
-        // New fields requested
-        'Flagship Programs': r['Flagship Program/s'] || r['Flagship Programs'] || r['Flagship Program'] || r['Flagship'] || '',
-        'Provides Funding': r['Provides Funding'] || r['Funding Provided'] || r['Funding?'] || r['Funding (Yes/No)'] || r['Funding'] || '',
-        'Funding Type': r['Funding Type'] || r['Type of Funding'] || r['Funding Types'] || '',
-        'Portfolio Enterprises': r['Portfolio Enterprises'] || r['Portfolio'] || r['Portfolio Companies'] || ''
-      }));
-
-      mapSheet = s2.map(r => ({
-        ESO: r.ESO || r['ESO Name'] || r['Name'] || '',
-        AreaType: (r.AreaType || r['Area Type'] || '').toString().toLowerCase(),
-        AreaNames: r.AreaNames || r['Area Names'] || r['Area'] || '',
-        PSGC_Codes: r.PSGC_Codes || r['PSGC Codes'] || r['PSGC'] || r['Code'] || '',
-        Pin_Lat: r.Pin_Lat || r['Lat'] || r['Latitude'] || '',
-        Pin_Lon: r.Pin_Lon || r['Lon'] || r['Longitude'] || '',
-        Notes: r.Notes || r['Notes / Remarks'] || '',
-        SourceURL: r.SourceURL || r['Source URL'] || r['URL'] || r['Link'] || ''
-      }));
-
-      merged = mergeRows(detailsSheet, mapSheet);
-      populateFilters(merged);
-      renderList(merged);
-      clearMap();
-      const s = document.getElementById('preloadStatus'); if (s) s.textContent = 'Loaded data from uploaded Excel.';
-    });
-
-    // =====================
-    // Self-tests (simple)
-    // =====================
-    function runSelfTests(){
-      try {
-        console.group('%cSelf-tests','color:#08842a;font-weight:bold');
-        console.assert(typeof mapSheet !== 'undefined', 'mapSheet should exist');
-        console.assert(!Array.isArray(mapSheet) || mapSheet.length >= 0, 'mapSheet is an array');
-        console.assert(labelAreaType('country')==='Philippines', 'labelAreaType country');
-        console.assert(labelAreaType('region')==='Region', 'labelAreaType region');
-        console.assert(labelAreaType('province')==='Province', 'labelAreaType province');
-        console.assert(labelAreaType('city_muni')==='City/Municipality', 'labelAreaType city_muni');
-        console.assert(typeof shadePhilippines === 'function', 'shadePhilippines present');
-        console.log('All basic assertions passed.');
-        console.groupEnd();
-      } catch(e) { console.error('Self-tests error:', e); }
-    }
-
     // Kick things off
     initMap();
-    tryLoadFromConfig(); // <-- NEW: reads data_sources.json and loads Google Sheets or built-in JSON
+    tryLoadFromConfig(); // reads data_sources.json and loads Google Sheets or built-in JSON
     feather.replace();
   </script>
 </body>

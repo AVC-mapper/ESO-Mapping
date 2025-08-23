@@ -48,12 +48,12 @@
 
     <!-- Sidebar -->
     <aside class="lg:col-span-1 space-y-4">
-      <!-- Legend (moved to top) -->
+      <!-- Legend (top) -->
       <section class="bg-white card shadow-soft p-4">
         <h2 class="font-semibold mb-2">Legend</h2>
         <ul class="text-sm text-gray-600 space-y-1">
           <li><span class="inline-block w-3 h-3 rounded-sm mr-2" style="background: rgba(8,132,42,.2); border: 2px solid var(--villgro);"></span> Highlighted coverage</li>
-          <li><span class="inline-block w-3 h-3 rounded-full mr-2 brand-bg"></span> ESO pin / centroid</li>
+          <li><span class="inline-block w-3 h-3 rounded-full mr-2 brand-bg"></span> ESO HQ pin</li>
         </ul>
       </section>
 
@@ -102,7 +102,7 @@
         </div>
       </section>
 
-      <!-- Data status (no upload/demo; just date updated) -->
+      <!-- Data status -->
       <section class="bg-white card shadow-soft p-4">
         <h2 class="font-semibold mb-1">Data</h2>
         <div id="dataUpdated" class="text-sm text-gray-700">Date updated: —</div>
@@ -155,27 +155,6 @@
       return m[(t||'').toLowerCase()] || t;
     }
 
-    // Region centroid fallback (PSGC -> [lat, lon])
-    const REGION_CENTROIDS = {
-      '0100000000':[16.0,120.5], '0200000000':[17.2,121.7], '0300000000':[15.0,120.9], '0400000000':[14.1,121.2],
-      '0500000000':[13.4,123.5], '0600000000':[11.0,122.5], '0700000000':[9.7,123.9],  '0800000000':[11.2,124.9],
-      '0900000000':[7.3,122.1],  '1000000000':[8.3,124.7],  '1100000000':[7.1,125.6],  '1200000000':[6.9,124.7],
-      '1300000000':[14.6,121.0], '1400000000':[17.0,121.0], '1600000000':[8.6,125.9],  '1700000000':[12.5,121.0],
-      '1900000000':[7.2,124.3]
-    };
-
-    // City centroid fallback (PSGC -> [lat, lon]) for common items
-    const CITY_CENTROIDS = {
-      '137404000':[14.6760,121.0437], // Quezon City
-      '137602000':[14.5547,121.0244], // Makati
-      '137403000':[14.5760,121.0850], // Pasig
-      '133900000':[14.5995,120.9842], // Manila
-      '137607000':[14.5176,121.0509], // Taguig
-      '072217000':[10.3157,123.8854], // Cebu City
-      '043403000':[14.3430,121.0810], // Biñan
-      '041031000':[14.0836,121.1497]  // Tanauan
-    };
-
     const PH_CENTER = [12.8797, 121.7740];
     const PH_BOUNDS = [[4.5,116.5],[21.2,127.0]]; // rectangle fallback
 
@@ -194,16 +173,68 @@
       markersGroup = L.layerGroup().addTo(map);
     }
 
+    // ---------- GeoBoundaries helpers (load once per level) ----------
+    const GB_URLS = {
+      adm1: 'https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM1/PHL/geoBoundariesCGAZ_ADM1.geojson', // Regions
+      adm2: 'https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM2/PHL/geoBoundariesCGAZ_ADM2.geojson', // Provinces
+      adm3: 'https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM3/PHL/geoBoundariesCGAZ_ADM3.geojson'  // Cities/Municipalities
+    };
+    const GB_CACHE = { adm1:null, adm2:null, adm3:null };
+
+    async function loadGeo(level){
+      if (GB_CACHE[level]) return GB_CACHE[level];
+      const url = GB_URLS[level];
+      const r = await fetch(url, { mode: 'cors' });
+      if (!r.ok) throw new Error('Could not load boundaries: ' + level);
+      GB_CACHE[level] = await r.json();
+      return GB_CACHE[level];
+    }
+
+    function norm(s){ return (s||'').toString().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').trim(); }
+    function stripQualifiers(s){
+      return norm(s)
+        .replace(/\b(city of|province of|region)\b/g,'')
+        .replace(/\b(city|province)\b/g,'')
+        .replace(/\(.*?\)/g,'')
+        .replace(/\s+/g,' ')
+        .trim();
+    }
+    function nameMatches(a,b){
+      const A = stripQualifiers(a), B = stripQualifiers(b);
+      return A===B || A.includes(B) || B.includes(A);
+    }
+
+    // Highlight polygons by AreaType + AreaNames using geoBoundaries
+    async function highlightByArea(areaType, areaNames){
+      const names = String(areaNames||'').split(/[,;|/]\s*/).filter(Boolean);
+      if (!names.length) return null;
+
+      const level = (areaType==='region') ? 'adm1'
+                 : (areaType==='province') ? 'adm2'
+                 : (areaType==='city_muni') ? 'adm3'
+                 : null;
+      if (!level) return null;
+
+      const gj = await loadGeo(level);
+      let bounds = null;
+      const style = { color: villgroColor, weight: 2, fillOpacity: 0.15 };
+
+      gj.features.forEach(f => {
+        const nm = f.properties?.shapeName || '';
+        if (names.some(n => nameMatches(n, nm))){
+          const layer = L.geoJSON(f, { style }).addTo(highlightLayerGroup);
+          bounds = bounds ? bounds.extend(layer.getBounds()) : layer.getBounds();
+        }
+      });
+
+      if (bounds) map.fitBounds(bounds.pad(0.2));
+      return bounds;
+    }
+
     // =====================
     // Helpers
     // =====================
     const toKey = s => (s||'').toString().trim().toLowerCase();
-
-    function csvEscape(val){
-      if (val == null) return '';
-      const s = String(val);
-      return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
-    }
 
     function arrayify(val) {
       if (!val) return [];
@@ -277,11 +308,12 @@
         ['Contact','Contact'],
         ['Notes','Notes']
       ];
+
       const site = (row.Website || row.SourceURL || '').trim();
       const siteBtn = site
         ? `<a class="pill active text-sm link" target="_blank" rel="noreferrer" href="${site}">Visit site</a>`
         : '';
-      
+
       let html = `<div class="flex items-start justify-between gap-2">
         <div>
           <h3 class="text-xl font-semibold">${row.ESO||''}</h3>
@@ -294,14 +326,14 @@
       fieldsPreferred.forEach(([label,key])=> {
         const val = row[key];
         if (!val) return;
-        const display = (key==='Website') ? `<a class="underline" href="${val}" target="_blank" rel="noreferrer">${val}</a>` : val;
-        html += `<div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-500">${label}</div><div class="text-sm">${display}</div></div>`;
+        html += `<div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-500">${label}</div><div class="text-sm">${val}</div></div>`;
       });
       html += '</div>';
 
-      // Show any remaining attributes
+      // Show any remaining attributes, excluding keys we never want to show
       const shown = new Set(fieldsPreferred.map(f=>f[1]).concat(['ESO','Website','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','SourceURL']));
-      const extras = Object.keys(row).filter(k=>row[k] && !shown.has(k));
+      const OMIT_EXTRA_KEYS = new Set(['Website']);
+      const extras = Object.keys(row).filter(k=>row[k] && !shown.has(k) && !OMIT_EXTRA_KEYS.has(k));
       if (extras.length) {
         html += '<div class="mt-4">';
         html += '<h4 class="font-semibold mb-2">More</h4>';
@@ -358,77 +390,36 @@
       return m;
     }
 
-    function circle(lat, lon, radiusKm=50) {
-      if (lat == null || lon == null) return null;
-      return L.circle([+lat, +lon], {
-        radius: radiusKm * 1000,
-        weight: 2,
-        color: villgroColor,
-        fillColor: villgroColor,
-        fillOpacity: 0.12
-      }).addTo(highlightLayerGroup);
-    }
-
+    // Coverage polygons from AreaType + AreaNames; HQ pin from Lat/Lon
     async function selectESO(esoName) {
       const row = merged.find(r => toKey(r.ESO) === toKey(esoName));
       if (!row) return;
+
       renderDetails(row);
       clearMap();
 
       const areaType = (row.AreaType||'').toLowerCase();
-      const codes = String(row.PSGC_Codes||'').split(/[,;\s]+/).filter(Boolean);
-      const lats = arrayify(row.Pin_Lat).map(Number);
-      const lons = arrayify(row.Pin_Lon).map(Number);
+      const la = parseFloat(row.Pin_Lat), lo = parseFloat(row.Pin_Lon);
 
-      let bounds = [];
-
-      if (areaType === 'country') {
-        await shadePhilippines();
-        pin(PH_CENTER[0], PH_CENTER[1], 'Philippines', row.ESO);
+      // 1) Coverage
+      if (areaType === 'country' || String(row.PSGC_Codes||'').split(/[,;\s]+/).some(c=>c.toUpperCase()==='PH')) {
+        await shadePhilippines();                 // full PH polygon
+      } else {
+        await highlightByArea(areaType, row.AreaNames); // exact admin polygons
       }
 
-      if (areaType === 'region') {
-        if (codes.length) {
-          codes.forEach(code => {
-            const c = REGION_CENTROIDS[code];
-            if (c) {
-              circle(c[0], c[1], 120);
-              const mk = pin(c[0], c[1], `Region Code ${code}`, row.ESO);
-              if (mk) bounds.push(mk.getLatLng());
-            }
-          });
-        }
+      // 2) HQ pin (no radius)
+      if (!isNaN(la) && !isNaN(lo)) {
+        pin(la, lo, row.AreaNames || 'HQ', row.ESO);
       }
 
-      if (areaType === 'city_muni' || areaType === 'province') {
-        if (lats.length && lons.length && lats.length === lons.length) {
-          lats.forEach((la, i) => {
-            const mk = pin(la, lons[i], row.AreaNames, row.ESO);
-            circle(la, lons[i], 8);
-            if (mk) bounds.push(mk.getLatLng());
-          });
-        } else if (codes.length) {
-          codes.forEach(code => {
-            const c = CITY_CENTROIDS[code] || REGION_CENTROIDS[code];
-            if (c) {
-              const mk = pin(c[0], c[1], `${row.AreaNames}`, row.ESO);
-              circle(c[0], c[1], areaType==='province'?30:10);
-              if (mk) bounds.push(mk.getLatLng());
-            }
-          });
-        }
-      }
-
-      if (!highlightLayerGroup.getLayers().length && lats.length && lons.length) {
-        const mk = pin(lats[0], lons[0], row.AreaNames, row.ESO);
-        circle(lats[0], lons[0], 10);
-        if (mk) bounds.push(mk.getLatLng());
-      }
-
-      if (Array.isArray(bounds) && bounds.length) {
-        const latlngs = bounds.map(ll => L.latLng(ll.lat || ll[0], ll.lng || ll[1]));
-        const bb = L.latLngBounds(latlngs);
-        map.fitBounds(bb.pad(0.25));
+      // Fit to what we have
+      const hl = highlightLayerGroup.getLayers();
+      const mk = markersGroup.getLayers();
+      if (hl.length) {
+        map.fitBounds(L.featureGroup(hl).getBounds().pad(0.15));
+      } else if (mk.length) {
+        map.fitBounds(L.featureGroup(mk).getBounds().pad(0.25));
       }
     }
 
@@ -468,9 +459,8 @@
       const types = uniq(rows.flatMap(r => arrayify(r.Type)));
       const sectors = uniq(rows.flatMap(r => arrayify(r.Sectors)));
       const stages = uniq(rows.flatMap(r => arrayify(r.Stage)));
-      buildOptions(document.getElementById('filterType'), types);
-      buildOptions(document.getElementById('filterSector'), sectors);
-      buildOptions(document.getElementById('filterStage'), stages);
+      const build = id => buildOptions(document.getElementById(id), id==='filterSector'?sectors:id==='filterType'?types:stages);
+      build('filterType'); build('filterSector'); build('filterStage');
     }
 
     // =====================
@@ -504,7 +494,7 @@
       const el = document.getElementById('dataUpdated');
       if (!el) return;
       try {
-        el.textContent = 'Date updated: ' + (new Date(d)).toLocaleString();
+        el.textContent = 'Date updated: ' + (new Date(d)).toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
       } catch(_) {
         el.textContent = 'Date updated: —';
       }
@@ -517,7 +507,7 @@
       const [d,a] = await Promise.all([ fetch(detailsCSV + b1), fetch(areaCSV + b2) ]);
       if(!d.ok || !a.ok) throw new Error('CSV not reachable');
 
-      // Try to read Last-Modified headers (may be absent due to CORS)
+      // Last-Modified headers (may be absent due to CORS)
       const lm1 = d.headers.get('last-modified');
       const lm2 = a.headers.get('last-modified');
       const updated = (lm1 || lm2) ? new Date(Math.max(lm1?Date.parse(lm1):0, lm2?Date.parse(lm2):0)) : new Date();
@@ -549,7 +539,7 @@
 
       mapSheet = s2.map(r => ({
         ESO: r.ESO || r['ESO Name'] || r['Name'] || '',
-        AreaType: (r.AreaType || r['Area Type'] || '').toString().toLowerCase(),
+        AreaType: (r.AreaType || r['Area Type'] || '').toString().toLowerCase(),   // country | region | province | city_muni
         AreaNames: r.AreaNames || r['Area Names'] || r['Area'] || '',
         PSGC_Codes: r.PSGC_Codes || r['PSGC Codes'] || r['PSGC'] || r['Code'] || '',
         Pin_Lat: r.Pin_Lat || r['Lat'] || r['Latitude'] || '',
@@ -596,18 +586,12 @@
       const rows = applyFilters();
       renderList(rows);
 
-      // Draw all filtered ESOs lightly for context
+      // Draw filtered ESOs: pins only (HQ). Coverage polygons appear when an ESO is selected.
       clearMap();
       for (const r of rows) {
-        const areaType = (r.AreaType||'').toLowerCase();
-        const codes = String(r.PSGC_Codes||'').split(/[,;\s]+/).filter(Boolean);
         const la = parseFloat(r.Pin_Lat), lo = parseFloat(r.Pin_Lon);
-        if (areaType==='country') { await shadePhilippines(); }
-        if (!isNaN(la) && !isNaN(lo)) pin(la, lo, r.AreaNames, r.ESO);
-        else if (areaType==='region' && codes.length) {
-          codes.forEach(code => { const c = REGION_CENTROIDS[code]; if (c) pin(c[0], c[1], `Region ${code}`, r.ESO); });
-        } else if (codes.length) {
-          codes.forEach(code => { const c = CITY_CENTROIDS[code]; if (c) pin(c[0], c[1], r.AreaNames, r.ESO); });
+        if (!isNaN(la) && !isNaN(lo)) {
+          pin(la, lo, r.AreaNames, r.ESO);
         }
       }
     });

@@ -277,13 +277,17 @@
         ['Contact','Contact'],
         ['Notes','Notes']
       ];
-
+      const site = (row.Website || row.SourceURL || '').trim();
+      const siteBtn = site
+        ? `<a class="pill active text-sm link" target="_blank" rel="noreferrer" href="${site}">Visit site</a>`
+        : '';
+      
       let html = `<div class="flex items-start justify-between gap-2">
         <div>
           <h3 class="text-xl font-semibold">${row.ESO||''}</h3>
           <div class="text-xs text-gray-500">Area: <span class="font-medium">${labelAreaType(row.AreaType)||''}</span> — ${row.AreaNames||''}</div>
         </div>
-        <a class="pill active text-sm link" target="_blank" rel="noreferrer" href="${row.Website||row.SourceURL||'#'}">Visit site</a>
+        ${siteBtn}
       </div>`;
 
       html += '<div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">';
@@ -296,7 +300,7 @@
       html += '</div>';
 
       // Show any remaining attributes
-      const shown = new Set(fieldsPreferred.map(f=>f[1]).concat(['ESO','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','SourceURL']));
+      const shown = new Set(fieldsPreferred.map(f=>f[1]).concat(['ESO','Website','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','SourceURL']));
       const extras = Object.keys(row).filter(k=>row[k] && !shown.has(k));
       if (extras.length) {
         html += '<div class="mt-4">';

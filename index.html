@@ -27,6 +27,19 @@
     .link { color: #0b7ef4; }
     :focus-visible { outline: 2px dashed var(--villgro); outline-offset: 2px; }
     header.sticky { z-index: 1000 !important; }
+
+    /* Marker hover tooltip styling */
+    .leaflet-tooltip.eso-tooltip {
+      background: var(--villgro);
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 2px 8px;
+      font-weight: 600;
+      font-size: 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,.15);
+      pointer-events: none; /* don’t steal mouse */
+    }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
@@ -48,12 +61,12 @@
 
     <!-- Sidebar -->
     <aside class="lg:col-span-1 space-y-4">
-      <!-- Legend -->
+      <!-- Legend (top) -->
       <section class="bg-white card shadow-soft p-4">
         <h2 class="font-semibold mb-2">Legend</h2>
         <ul class="text-sm text-gray-600 space-y-1">
-          <li><span class="inline-block w-3 h-3 rounded-sm mr-2" style="background: rgba(8,132,42,.2); border: 2px solid var(--villgro);"></span> PSGC boundary coverage</li>
-          <li><span class="inline-block w-3 h-3 rounded-full mr-2 brand-bg"></span> ESO HQ pin</li>
+          <li><span class="inline-block w-3 h-3 rounded-sm mr-2" style="background: rgba(8,132,42,.2); border: 2px solid var(--villgro);"></span> Coverage (by PSGC)</li>
+          <li><span class="inline-block w-3 h-3 rounded-full mr-2 brand-bg"></span> ESO pin / HQ</li>
         </ul>
       </section>
 
@@ -102,7 +115,7 @@
         </div>
       </section>
 
-      <!-- Data status -->
+      <!-- Data status (no uploads) -->
       <section class="bg-white card shadow-soft p-4">
         <h2 class="font-semibold mb-1">Data</h2>
         <div id="dataUpdated" class="text-sm text-gray-700">Date updated: —</div>
@@ -145,9 +158,10 @@
     // =====================
     const villgroColor = '#08842a';
     let map, highlightLayerGroup, markersGroup;
-    let detailsSheet = [];
-    let mapSheet = [];
-    let merged = [];
+    let detailsSheet = [];   // Sheet 1 rows (details)
+    let mapSheet = [];       // Sheet 2 rows (map-ready)
+    let merged = [];         // Details + map merged by ESO
+    let selectedESO = null;  // null = overview
     let currentFilters = { text: '', types: [], sectors: [], stages: [], areaTypes: [], gender: '' };
 
     function labelAreaType(t){
@@ -168,185 +182,145 @@
       }).addTo(map);
       highlightLayerGroup = L.layerGroup().addTo(map);
       markersGroup = L.layerGroup().addTo(map);
+
+      // Clicking the basemap toggles back to overview
+      map.on('click', () => {
+        selectedESO = null;
+        renderDetails(null);
+        showOverviewPins();
+      });
     }
 
     // =====================
-    // PSGC admin level & names
+    // PSGC centroids (expand as needed)
     // =====================
+    // Regions (ADM1)
+    const REGION_CENTROIDS = {
+      '0100000000':[16.0,120.5], '0200000000':[17.2,121.7], '0300000000':[15.0,120.9],
+      '0400000000':[14.1,121.2], '0500000000':[13.4,123.5], '0600000000':[10.7,122.5],
+      '0700000000':[9.7,123.9],  '0800000000':[11.2,124.9], '0900000000':[7.3,122.1],
+      '1000000000':[8.3,124.7],  '1100000000':[7.1,125.6],  '1200000000':[6.9,124.7],
+      '1300000000':[14.6,121.0], '1400000000':[17.0,121.0], '1500000000':[7.2,124.3],
+      '1600000000':[8.6,125.9],  '1700000000':[12.5,121.0],
+      // Some sheets use 1900000000 for BARMM – map it to 1500000000
+      '1900000000':[7.2,124.3]
+    };
+
+    // Provinces (ADM2) — add as needed
+    const PROVINCE_CENTROIDS = {
+      '041000000':[13.99,121.17], // Batangas
+      '042100000':[14.28,120.89], // Cavite
+      '043400000':[14.18,121.29], // Laguna
+      '051700000':[13.14,123.53], // Albay
+      '060400000':[11.58,122.75], // Iloilo (example)
+      '133000000':[14.60,121.00]  // Manila, prov-equivalent
+    };
+
+    // Cities / Municipalities (ADM3) — common ones you use
+    const CITY_CENTROIDS = {
+      '137404000':[14.6760,121.0437], // Quezon City
+      '137602000':[14.5547,121.0244], // Makati
+      '137403000':[14.5760,121.0850], // Pasig
+      '137401000':[14.5794,121.0359], // Mandaluyong
+      '133900000':[14.5995,120.9842], // Manila
+      '137607000':[14.5176,121.0509], // Taguig
+      '072217000':[10.3157,123.8854], // Cebu City
+      '043403000':[14.3430,121.0810], // Biñan
+      '041031000':[14.0836,121.1497], // Tanauan
+      '103504000':[8.2280,124.2450],  // Iligan
+      '160202000':[8.9475,125.5406],  // Butuan
+      '051724000':[13.6217,123.1948], // Naga (CamSur)
+      '050170000':[13.1372,123.7344]  // Legazpi
+    };
+
+    // =====================
+    // Helpers
+    // =====================
+    const toKey = s => (s||'').toString().trim().toLowerCase();
+    const isNum = v => !(v===null || v===undefined || v==='') && !isNaN(parseFloat(v));
+    function multiList(val){ return String(val||'').split(/[;,\n]/).map(s=>s.trim()).filter(Boolean); }
+    function arrayify(val){ if(!val) return []; if(Array.isArray(val)) return val; return String(val).split(/[,;/\n]/).map(s=>s.trim()).filter(Boolean); }
+    function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
+    function buildOptions(selectEl, values){ selectEl.innerHTML=''; uniq(values).sort((a,b)=>a.localeCompare(b)).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; selectEl.appendChild(o); }); }
+
+    // Admin-level from PSGC code
     function levelFromPSGC(code){
       const c = String(code||'').trim().toUpperCase();
       if (!c) return null;
       if (c==='PH') return 'country';
-      if (c.length>=10) return 'region';   // official region code format (10 digits)
-      if (c.length===9)  return 'city_muni'; // most city/muni PSGCs are 9 digits
+      if (REGION_CENTROIDS[c])   return 'region';
+      if (CITY_CENTROIDS[c])     return 'city_muni';
+      if (PROVINCE_CENTROIDS[c]) return 'province';
+      // heuristics
+      if (c.length>=10) return 'region';
       if (c.length===9 && c.endsWith('000')) return 'province';
-      if (c.length===9 && c.slice(-3)==='000') return 'province';
-      if (c.length===8)  return 'province';
+      if (c.length===9) return 'city_muni';
+      if (c.length===8) return 'province';
       return null;
     }
 
-    // Canonical region names to improve matching vs geoBoundaries shapeName
-    const PSGC_REGION_NAMES = {
-      '0100000000':'Ilocos Region',
-      '0200000000':'Cagayan Valley',
-      '0300000000':'Central Luzon',
-      '0400000000':'CALABARZON',
-      '0500000000':'Bicol Region',
-      '0600000000':'Western Visayas',
-      '0700000000':'Central Visayas',
-      '0800000000':'Eastern Visayas',
-      '0900000000':'Zamboanga Peninsula',
-      '1000000000':'Northern Mindanao',
-      '1100000000':'Davao Region',
-      '1200000000':'SOCCSKSARGEN',
-      '1300000000':'National Capital Region',
-      '1400000000':'Cordillera Administrative Region',
-      '1500000000':'Bangsamoro Autonomous Region in Muslim Mindanao',
-      '1600000000':'Caraga',
-      '1700000000':'MIMAROPA Region',
-      // some sheets use 1900000000 for BARMM:
-      '1900000000':'Bangsamoro Autonomous Region in Muslim Mindanao'
-    };
-
-    // =====================
-    // GeoJSON loading (geoBoundaries)
-    // =====================
-    const GB_URLS = {
-      ADM0: [
-        'https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM0/PHL/geoBoundariesCGAZ_ADM0.geojson',
-        'https://raw.githubusercontent.com/wmgeolab/geoBoundaries/gh-pages/releaseData/geoBoundariesCGAZ_ADM0/PHL/geoBoundariesCGAZ_ADM0.geojson'
-      ],
-      ADM1: [
-        'https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM1/PHL/geoBoundariesCGAZ_ADM1.geojson',
-        'https://raw.githubusercontent.com/wmgeolab/geoBoundaries/gh-pages/releaseData/geoBoundariesCGAZ_ADM1/PHL/geoBoundariesCGAZ_ADM1.geojson'
-      ],
-      ADM2: [
-        'https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM2/PHL/geoBoundariesCGAZ_ADM2.geojson',
-        'https://raw.githubusercontent.com/wmgeolab/geoBoundaries/gh-pages/releaseData/geoBoundariesCGAZ_ADM2/PHL/geoBoundariesCGAZ_ADM2.geojson'
-      ],
-      ADM3: [
-        'https://cdn.jsdelivr.net/gh/wmgeolab/geoBoundaries@main/releaseData/geoBoundariesCGAZ_ADM3/PHL/geoBoundariesCGAZ_ADM3.geojson',
-        'https://raw.githubusercontent.com/wmgeolab/geoBoundaries/gh-pages/releaseData/geoBoundariesCGAZ_ADM3/PHL/geoBoundariesCGAZ_ADM3.geojson'
-      ]
-    };
-    const GB_CACHE = {};
-
-    async function loadGB(level){
-      if (GB_CACHE[level]) return GB_CACHE[level];
-      const urls = GB_URLS[level] || [];
-      for (const url of urls){
-        try{
-          const r = await fetch(url, { mode: 'cors' });
-          if (r.ok){ GB_CACHE[level] = await r.json(); return GB_CACHE[level]; }
-        }catch(e){}
+    // Radius (km) per admin level; used for each PSGC independently
+    function radiusKmForCode(code, fallbackAreaType=''){
+      const lvl = levelFromPSGC(code) || (fallbackAreaType||'').toLowerCase();
+      switch(lvl){
+        case 'country':  return 400; // (unused—country uses polygon/rect)
+        case 'region':   return 140;
+        case 'province': return 45;
+        case 'city_muni':return 12;
+        default:         return 20;
       }
-      return null;
     }
 
-    // =====================
-    // Matching helpers
-    // =====================
-    function norm(s){
-      return String(s||'')
-        .toLowerCase()
-        .replace(/ñ/g,'n')
-        .replace(/-/g,' ')
-        .replace(/city of /g,'')
-        .replace(/\b(city|province|region)\b/g,'')
-        .replace(/\s+/g,' ')
-        .trim();
-    }
-
-    function pickFeatureByName(features, wantedName){
-      const target = norm(wantedName);
-      if (!target) return null;
-      // exact normalized match first
-      let f = features.find(ft => norm(ft.properties?.shapeName) === target);
-      if (f) return f;
-      // contains/contained heuristic
-      f = features.find(ft => {
-        const n = norm(ft.properties?.shapeName);
-        return n.includes(target) || target.includes(n);
-      });
-      return f || null;
+    // Centroid lookup for a PSGC code; fall back to null
+    function centroidForPSGC(code){
+      const c = String(code||'').trim().toUpperCase();
+      if (!c) return null;
+      if (c==='PH') return PH_CENTER;
+      return REGION_CENTROIDS[c] || PROVINCE_CENTROIDS[c] || CITY_CENTROIDS[c] || null;
     }
 
     // =====================
     // Rendering: List & Details
     // =====================
-    const toKey = s => (s||'').toString().trim().toLowerCase();
-    const isNum = v => !(v===null || v===undefined || v==='') && !isNaN(parseFloat(v));
-    function multiList(val){ return String(val||'').split(/[;,\n]/).map(s=>s.trim()).filter(Boolean); }
-
-    function arrayify(val) {
-      if (!val) return [];
-      if (Array.isArray(val)) return val;
-      return String(val).split(/[,;/\n]/).map(s => s.trim()).filter(Boolean);
-    }
-    function uniq(arr) { return [...new Set(arr.filter(Boolean))]; }
-    function buildOptions(selectEl, values) {
-      selectEl.innerHTML = ''; uniq(values).sort((a,b)=>a.localeCompare(b)).forEach(v => {
-        const opt = document.createElement('option'); opt.value = v; opt.textContent = v; selectEl.appendChild(opt);
-      });
-    }
-
-    function applyFilters() {
-      const text = currentFilters.text.toLowerCase();
-      const tset = new Set(currentFilters.types);
-      const sset = new Set(currentFilters.sectors);
-      const stset = new Set(currentFilters.stages);
-      const atset = new Set(currentFilters.areaTypes);
-      const gender = (currentFilters.gender||'').toLowerCase();
-      return merged.filter(row => {
-        const hay = [row.ESO, row.Type, row.Sectors, row.Programs, row.Stage].map(x => (x||'').toLowerCase()).join(' | ');
+    function applyFilters(){
+      const text=currentFilters.text.toLowerCase(), tset=new Set(currentFilters.types), sset=new Set(currentFilters.sectors), stset=new Set(currentFilters.stages), atset=new Set(currentFilters.areaTypes), gender=(currentFilters.gender||'').toLowerCase();
+      return merged.filter(row=>{
+        const hay=[row.ESO,row.Type,row.Sectors,row.Programs,row.Stage].map(x=>(x||'').toLowerCase()).join(' | ');
         if (text && !hay.includes(text)) return false;
-        if (tset.size && !arrayify(row.Type).some(v => tset.has(v))) return false;
-        if (sset.size && !arrayify(row.Sectors).some(v => sset.has(v))) return false;
-        if (stset.size && !arrayify(row.Stage).some(v => stset.has(v))) return false;
+        if (tset.size && !arrayify(row.Type).some(v=>tset.has(v))) return false;
+        if (sset.size && !arrayify(row.Sectors).some(v=>sset.has(v))) return false;
+        if (stset.size && !arrayify(row.Stage).some(v=>stset.has(v))) return false;
         if (atset.size && !atset.has((row.AreaType||'').toLowerCase())) return false;
-        if (gender && (String(row['Gender Lens']||'').toLowerCase() !== gender.toLowerCase())) return false;
+        if (gender && (String(row['Gender Lens']||'').toLowerCase()!==gender.toLowerCase())) return false;
         return true;
       });
     }
 
-    function renderList(rows) {
-      const list = document.getElementById('esoList');
-      list.innerHTML = '';
-      document.getElementById('countBadge').textContent = rows.length;
-      rows.sort((a,b)=>a.ESO.localeCompare(b.ESO)).forEach(row => {
-        const btn = document.createElement('button');
-        btn.className = 'w-full text-left px-3 py-2 rounded-lg hover:bg-green-50 focus:bg-green-50 border border-transparent hover:border-green-100 mb-1';
-        btn.innerHTML = `<div class="font-medium">${row.ESO||'—'}</div>
-                         <div class="text-xs text-gray-500 truncate">${row.Type||''} • ${row.Sectors||''}</div>`;
-        btn.addEventListener('click', ()=> selectESO(row.ESO));
-        list.appendChild(btn);
+    function renderList(rows){
+      const list=document.getElementById('esoList'); list.innerHTML='';
+      document.getElementById('countBadge').textContent=rows.length;
+      rows.sort((a,b)=>a.ESO.localeCompare(b.ESO)).forEach(row=>{
+        const btn=document.createElement('button');
+        btn.className='w-full text-left px-3 py-2 rounded-lg hover:bg-green-50 focus:bg-green-50 border border-transparent hover:border-green-100 mb-1';
+        btn.innerHTML=`<div class="font-medium">${row.ESO||'—'}</div><div class="text-xs text-gray-500 truncate">${row.Type||''} • ${row.Sectors||''}</div>`;
+        btn.addEventListener('click',()=>selectESO(row.ESO)); list.appendChild(btn);
       });
     }
 
-    function renderDetails(row) {
-      const wrap = document.getElementById('details');
-      if (!row) { wrap.innerHTML = '<p class="text-gray-500">Select an ESO from the list or click a marker on the map to see details here.</p>'; return; }
-      const fieldsPreferred = [
-        ['About','About'],['Flagship Program/s','Flagship Programs'],['Provides Funding','Provides Funding'],
-        ['Funding Type','Funding Type'],['Portfolio Enterprises','Portfolio Enterprises'],
-        ['Programs','Programs'],['Type','Type'],['Sectors','Sectors'],['Stage','Stage'],
-        ['Gender Lens','Gender Lens'],['Email','Email'],['Contact','Contact'],['Notes','Notes']
-      ];
-      const site = (row.Website || row.SourceURL || '').trim();
-      const siteBtn = site ? `<a class="pill active text-sm link" target="_blank" rel="noreferrer" href="${site}">Visit site</a>` : '';
-      let html = `<div class="flex items-start justify-between gap-2">
-        <div><h3 class="text-xl font-semibold">${row.ESO||''}</h3>
-        <div class="text-xs text-gray-500">Area: <span class="font-medium">${labelAreaType(row.AreaType)||''}</span> — ${row.AreaNames||''}</div></div>${siteBtn}</div>`;
-      html += '<div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">';
-      fieldsPreferred.forEach(([label,key])=>{ const val=row[key]; if(!val) return;
-        html += `<div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-500">${label}</div><div class="text-sm">${val}</div></div>`;});
-      html += '</div>';
-      const shown=new Set(fieldsPreferred.map(f=>f[1]).concat(['ESO','Website','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','SourceURL']));
-      const OMIT_EXTRA_KEYS=new Set(['Website']);
-      const extras=Object.keys(row).filter(k=>row[k] && !shown.has(k) && !OMIT_EXTRA_KEYS.has(k));
-      if(extras.length){ html+='<div class="mt-4"><h4 class="font-semibold mb-2">More</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">';
-        extras.forEach(k=>{ html+=`<div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-500">${k}</div><div class="text-sm">${row[k]}</div></div>`;});
-        html+='</div></div>'; }
+    function renderDetails(row){
+      const wrap=document.getElementById('details');
+      if(!row){ wrap.innerHTML='<p class="text-gray-500">Select an ESO from the list or click a marker on the map to see details here.</p>'; return; }
+      const fields=[['About','About'],['Flagship Program/s','Flagship Programs'],['Provides Funding','Provides Funding'],['Funding Type','Funding Type'],['Portfolio Enterprises','Portfolio Enterprises'],['Programs','Programs'],['Type','Type'],['Sectors','Sectors'],['Stage','Stage'],['Gender Lens','Gender Lens'],['Email','Email'],['Contact','Contact'],['Notes','Notes']];
+      const site=(row.Website||row.SourceURL||'').trim();
+      const siteBtn=site?`<a class="pill active text-sm link" target="_blank" rel="noreferrer" href="${site}">Visit site</a>`:'';
+      let html=`<div class="flex items-start justify-between gap-2"><div><h3 class="text-xl font-semibold">${row.ESO||''}</h3><div class="text-xs text-gray-500">Area: <span class="font-medium">${labelAreaType(row.AreaType)||''}</span> — ${row.AreaNames||''}</div></div>${siteBtn}</div>`;
+      html+='<div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">';
+      fields.forEach(([label,key])=>{ const val=row[key]; if(!val) return; html+=`<div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-500">${label}</div><div class="text-sm">${val}</div></div>`; });
+      html+='</div>';
+      const shown=new Set(fields.map(f=>f[1]).concat(['ESO','Website','AreaType','AreaNames','PSGC_Codes','Pin_Lat','Pin_Lon','SourceURL']));
+      const OMIT_EXTRA=new Set(['Website']);
+      const extras=Object.keys(row).filter(k=>row[k] && !shown.has(k) && !OMIT_EXTRA.has(k));
+      if(extras.length){ html+='<div class="mt-4"><h4 class="font-semibold mb-2">More</h4><div class="grid grid-cols-1 md:grid-cols-2 gap-3">'; extras.forEach(k=>{ html+=`<div class="bg-gray-50 rounded-lg p-3"><div class="text-xs text-gray-500">${k}</div><div class="text-sm">${row[k]}</div></div>`; }); html+='</div></div>'; }
       wrap.innerHTML=html;
     }
 
@@ -356,106 +330,117 @@
     function clearMap(){ highlightLayerGroup.clearLayers(); markersGroup.clearLayers(); }
 
     async function shadePhilippines(){
-      const adm0 = await loadGB('ADM0');
-      if (adm0){
-        const layer=L.geoJSON(adm0,{style:{color:villgroColor,weight:2,fillOpacity:0.15}}).addTo(highlightLayerGroup);
-        map.fitBounds(layer.getBounds(),{padding:[20,20]});
-        return layer;
-      }
+      // simple rectangle fallback to keep it fast/light
       const rect=L.rectangle(PH_BOUNDS,{color:villgroColor,weight:2,fillOpacity:0.15}).addTo(highlightLayerGroup);
       map.fitBounds(rect.getBounds(),{padding:[20,20]});
       return rect;
     }
 
-    function pin(lat,lon,label,eso,zoomOnClick=true){
+    function pin(lat, lon, label, eso, zoomOnClick=true){
       if(!isNum(lat)||!isNum(lon)) return null;
-      const m=L.circleMarker([+lat,+lon],{radius:7,weight:2,color:villgroColor,fillColor:villgroColor,fillOpacity:0.8})
-        .addTo(markersGroup)
-        .bindPopup(`<div class='text-sm'><div class='font-semibold mb-1'>${eso||label||'ESO'}</div><div>${label||''}</div></div>`);
-      m.on('click',()=>{ if(zoomOnClick) map.setView(m.getLatLng(),12,{animate:true}); selectESO(eso); });
+      const m=L.circleMarker([+lat,+lon],{
+        radius:7,weight:2,color:villgroColor,fillColor:villgroColor,fillOpacity:0.85
+      }).addTo(markersGroup);
+      // Nice hover tooltip
+      m.bindTooltip(eso||label||'ESO',{direction:'top',offset:[0,-8],sticky:true,className:'eso-tooltip'});
+      // Click -> zoom & details
+      m.on('click',()=>{
+        if(zoomOnClick) map.setView(m.getLatLng(), 12, { animate:true });
+        selectESO(eso);
+      });
+      // Popup on tap/mobile
+      m.bindPopup(`<div class='text-sm'><div class='font-semibold mb-1'>${eso||label||'ESO'}</div><div>${label||''}</div></div>`);
       return m;
     }
 
-    function drawCircle(lat,lon,km=20){
+    function drawCircle(lat, lon, km=20){
       if(!isNum(lat)||!isNum(lon)) return null;
-      return L.circle([+lat,+lon],{radius:km*1000,weight:2,color:villgroColor,fillColor:villgroColor,fillOpacity:0.12}).addTo(highlightLayerGroup);
+      return L.circle([+lat,+lon],{
+        radius: km*1000, weight:2, color:villgroColor, fillColor:villgroColor, fillOpacity:0.12
+      }).addTo(highlightLayerGroup);
     }
 
-    // Main select handler (now tries real polygons)
+    // Show all pins for filtered rows (overview mode)
+    function showOverviewPins(){
+      clearMap();
+      const rows = applyFilters();
+      renderList(rows);
+      const bounds = [];
+      rows.forEach(r=>{
+        const lats = multiList(r.Pin_Lat).map(parseFloat);
+        const lons = multiList(r.Pin_Lon).map(parseFloat);
+        for(let i=0;i<Math.max(lats.length,lons.length);i++){
+          if(isNum(lats[i]) && isNum(lons[i])){
+            const mk = pin(lats[i], lons[i], r.AreaNames, r.ESO, false);
+            if(mk) bounds.push(L.latLngBounds([mk.getLatLng(), mk.getLatLng()]));
+          }
+        }
+      });
+      if(bounds.length){
+        let bb = bounds[0]; for(let i=1;i<bounds.length;i++) bb = bb.extend(bounds[i]);
+        map.fitBounds(bb.pad(0.2));
+      } else {
+        map.setView(PH_CENTER, 5.6);
+      }
+    }
+
+    // Select a single ESO: draw coverage (radii per PSGC) + HQ pins
     async function selectESO(esoName){
-      const row=merged.find(r=>toKey(r.ESO)===toKey(esoName)); if(!row) return;
-      renderDetails(row); clearMap();
+      selectedESO = esoName;
+      const row = merged.find(r=>toKey(r.ESO)===toKey(esoName)); if(!row) return;
 
-      const codes=multiList(row.PSGC_Codes);
-      const latList=multiList(row.Pin_Lat).map(parseFloat);
-      const lonList=multiList(row.Pin_Lon).map(parseFloat);
+      renderDetails(row);
+      clearMap();
 
-      const bounds=[];
+      const areaType = (row.AreaType||'').toLowerCase();
+      const codes = multiList(row.PSGC_Codes);
+      const lats  = multiList(row.Pin_Lat).map(parseFloat);
+      const lons  = multiList(row.Pin_Lon).map(parseFloat);
+      const bounds = [];
 
-      // 1) Country polygon if any code == PH or AreaType=country
-      const areaType=(row.AreaType||'').toLowerCase();
-      if (areaType==='country' || codes.some(c=>String(c).trim().toUpperCase()==='PH')){
-        const ph = await shadePhilippines(); if (ph && ph.getBounds) bounds.push(ph.getBounds());
+      // PH coverage if flagged
+      if(areaType==='country' || codes.includes('PH') || codes.includes('ph')){
+        const ph = await shadePhilippines();
+        if (ph && ph.getBounds) bounds.push(ph.getBounds());
       }
 
-      // 2) For each PSGC code, try to draw exact boundary (ADM1/2/3); fallback to circle if not found
-      for (let i=0;i<codes.length;i++){
-        const code = String(codes[i]||'').trim().toUpperCase();
-        if (!code || code==='PH') continue;
-
-        const lvl = levelFromPSGC(code);
-        let dataset=null, layer=null, nameForMatch=row.AreaNames || '';
-
-        if (lvl==='region'){
-          dataset = await loadGB('ADM1');
-          // Prefer canonical region name from map for matching:
-          nameForMatch = PSGC_REGION_NAMES[code] || nameForMatch;
-        } else if (lvl==='province'){
-          dataset = await loadGB('ADM2');
-        } else if (lvl==='city_muni'){
-          dataset = await loadGB('ADM3');
+      // Draw a radius per PSGC code (region/province/city), mixing allowed
+      codes.forEach((code, idx)=>{
+        const c = String(code||'').trim().toUpperCase();
+        if(!c || c==='PH') return;
+        const center = centroidForPSGC(c) || (isNum(lats[idx])&&isNum(lons[idx]) ? [lats[idx], lons[idx]] : (isNum(lats[0])&&isNum(lons[0]) ? [lats[0], lons[0]] : null));
+        if(center){
+          const km = radiusKmForCode(c, areaType);
+          const circ = drawCircle(center[0], center[1], km);
+          if(circ) bounds.push(circ.getBounds());
         }
+      });
 
-        let matched = null;
-        if (dataset && dataset.features){
-          matched = pickFeatureByName(dataset.features, nameForMatch);
-        }
-
-        if (matched){
-          layer = L.geoJSON(matched, { style:{ color:villgroColor, weight:2, fillOpacity:0.12 } }).addTo(highlightLayerGroup);
-          bounds.push(layer.getBounds());
-        } else {
-          // Fallback: draw a circle using the i-th HQ pin (if available) or a generic size
-          const la = latList[i] ?? latList[0], lo = lonList[i] ?? lonList[0];
-          const km = (lvl==='region'?140 : lvl==='province'?45 : 12);
-          if (isNum(la) && isNum(lo)) { const circ=drawCircle(la,lo,km); if(circ) bounds.push(circ.getBounds()); }
+      // HQ pins (can be multiple)
+      for(let i=0;i<Math.max(lats.length,lons.length);i++){
+        if(isNum(lats[i]) && isNum(lons[i])){
+          const mk = pin(lats[i], lons[i], row.AreaNames || 'HQ', row.ESO, true);
+          if(mk) bounds.push(L.latLngBounds([mk.getLatLng(), mk.getLatLng()]));
         }
       }
 
-      // 3) HQ pins
-      for (let i=0;i<Math.max(latList.length,lonList.length);i++){
-        if (isNum(latList[i]) && isNum(lonList[i])){
-          const mk=pin(latList[i],lonList[i],row.AreaNames||'HQ',row.ESO,true);
-          if (mk) bounds.push(L.latLngBounds([mk.getLatLng(), mk.getLatLng()]));
-        }
-      }
-
-      // 4) Fit bounds
-      if (bounds.length){
+      // Fit to what we drew
+      if(bounds.length){
         let bb=bounds[0]; for(let i=1;i<bounds.length;i++) bb = bb.extend(bounds[i]);
         map.fitBounds(bb.pad(0.2));
       }
     }
 
     // =====================
-    // Data loading & merging (Google Sheets / built-in)
+    // Data Loading & Merging
     // =====================
     function normalizeColumns(obj){ const out={}; for(const k in obj){ if(!Object.hasOwn(obj,k)) continue; const nk=k.replace(/\s+/g,' ').trim(); out[nk]=obj[k]; } return out; }
 
-    function mergeRows(details,mapping){
+    function mergeRows(details, mapping){
       const byName=new Map();
       details.forEach(r=>{ const name=String(r.ESO||r['ESO Name']||r['Name']||'').trim(); if(!name) return; byName.set(name.toLowerCase(),{...r,ESO:name}); });
-      const output=[]; mapping.forEach(m=>{ const name=String(m.ESO||'').trim(); if(!name) return; const base=byName.get(name.toLowerCase())||{ESO:name}; output.push({...base,...m}); });
+      const output=[];
+      mapping.forEach(m=>{ const name=String(m.ESO||'').trim(); if(!name) return; const base=byName.get(name.toLowerCase())||{ESO:name}; output.push({...base,...m}); });
       return output;
     }
 
@@ -468,31 +453,67 @@
       buildOptions(document.getElementById('filterStage'),stages);
     }
 
+    // Built-in JSON fallback (optional)
     async function tryPreloadBuiltins(){
       try{
         const [d,a]=await Promise.all([fetch('esos_details.json',{cache:'no-store'}), fetch('esos_area.json',{cache:'no-store'})]);
         if(!d.ok || !a.ok) throw new Error('Built-in JSON not found');
         detailsSheet=await d.json(); mapSheet=await a.json();
         merged=mergeRows(detailsSheet,mapSheet); populateFilters(merged); renderList(merged);
-        document.getElementById('btnApply').click(); setStatus('Loaded data.'); setUpdated(new Date());
+        setStatus('Loaded data.'); setUpdated(new Date());
+        showOverviewPins();
       }catch(err){ setStatus('Tip: Add esos_details.json & esos_area.json or configure data_sources.json.'); }
     }
     function setStatus(msg){ const s=document.getElementById('preloadStatus'); if(s) s.textContent=msg; }
     function setUpdated(d){ const el=document.getElementById('dataUpdated'); if(!el) return; try{ el.textContent='Date updated: '+(new Date(d)).toLocaleString('en-PH',{timeZone:'Asia/Manila'});}catch(_){ el.textContent='Date updated: —'; } }
 
-    async function tryLoadGoogleSheets(detailsCSV,areaCSV){
+    // Load from Google Sheets CSV via data_sources.json
+    async function tryLoadGoogleSheets(detailsCSV, areaCSV){
       const b1=(detailsCSV.includes('?')?'&':'?')+'_ts='+Date.now();
       const b2=(areaCSV.includes('?')?'&':'?')+'_ts='+Date.now();
-      const [d,a]=await Promise.all([fetch(detailsCSV+b1),fetch(areaCSV+b2)]); if(!d.ok||!a.ok) throw new Error('CSV not reachable');
+      const [d,a]=await Promise.all([ fetch(detailsCSV+b1), fetch(areaCSV+b2) ]);
+      if(!d.ok || !a.ok) throw new Error('CSV not reachable');
+
       const lm1=d.headers.get('last-modified'); const lm2=a.headers.get('last-modified');
-      const updated=(lm1||lm2)?new Date(Math.max(lm1?Date.parse(lm1):0,lm2?Date.parse(lm2):0)):new Date(); setUpdated(updated);
+      const updated=(lm1||lm2)?new Date(Math.max(lm1?Date.parse(lm1):0, lm2?Date.parse(lm2):0)):new Date();
+      setUpdated(updated);
+
       const dtext=await d.text(); const atext=await a.text();
       const dwb=XLSX.read(dtext,{type:'string'}); const awb=XLSX.read(atext,{type:'string'});
       const s1=XLSX.utils.sheet_to_json(dwb.Sheets[dwb.SheetNames[0]],{defval:''}).map(normalizeColumns);
       const s2=XLSX.utils.sheet_to_json(awb.Sheets[awb.SheetNames[0]],{defval:''}).map(normalizeColumns);
-      detailsSheet=s1.map(r=>({ ESO:r.ESO||r['ESO Name']||r['Name']||r['Organization']||'', Type:r.Type||r['ESO Type']||r['Type(s)']||r['Type of ESO']||'', Sectors:r.Sectors||r['Sector']||r['Sector/Focus']||r['Sectors Covered']||r['Focus Sectors']||r['Focus Sector(s)']||r['Industries']||r['Industry']||r['Verticals']||r['Sector(s)']||'', Stage:r.Stage||r['Stages']||r['Stage Focus']||'', 'Gender Lens':r['Gender Lens']||r['Gender-Lens']||r['Gender-lens']||r['Gender']||'', Programs:r.Programs||r['Program(s)']||r['Programs Offered']||r['Programs and Initiatives']||'', About:r.About||r['About / Description']||r['Description']||'', Website:r.Website||r['Website / Link']||r['Link']||'', Email:r.Email||r['Contact Email']||'', Contact:r.Contact||r['Contact Person']||'', 'Flagship Programs':r['Flagship Program/s']||r['Flagship Programs']||r['Flagship Program']||r['Flagship']||'', 'Provides Funding':r['Provides Funding']||r['Provide Funding']||r['Funding Provided']||r['Funding?']||r['Funding (Yes/No)']||r['Funding']||'', 'Funding Type':r['Funding Type']||r['Type of Funding']||r['Funding Types']||'', 'Portfolio Enterprises':r['Portfolio Enterprises']||r['Portfolio']||r['Portfolio Companies']||'' }));
-      mapSheet=s2.map(r=>({ ESO:r.ESO||r['ESO Name']||r['Name']||'', AreaType:(r.AreaType||r['Area Type']||'').toString().toLowerCase(), AreaNames:r.AreaNames||r['Area Names']||r['Area']||'', PSGC_Codes:r.PSGC_Codes||r['PSGC Codes']||r['PSGC']||r['Code']||'', Pin_Lat:r.Pin_Lat||r['Lat']||r['Latitude']||'', Pin_Lon:r.Pin_Lon||r['Lon']||r['Longitude']||'', Notes:r.Notes||r['Notes / Remarks']||'', SourceURL:r.SourceURL||r['Source URL']||r['URL']||r['Link']||'' }));
-      merged=mergeRows(detailsSheet,mapSheet); populateFilters(merged); renderList(merged); document.getElementById('btnApply').click(); setStatus('Loaded data.');
+
+      detailsSheet=s1.map(r=>({
+        ESO:r.ESO||r['ESO Name']||r['Name']||r['Organization']||'',
+        Type:r.Type||r['ESO Type']||r['Type(s)']||r['Type of ESO']||'',
+        Sectors:r.Sectors||r['Sector']||r['Sector/Focus']||r['Sectors Covered']||r['Focus Sectors']||r['Focus Sector(s)']||r['Industries']||r['Industry']||r['Verticals']||r['Sector(s)']||'',
+        Stage:r.Stage||r['Stages']||r['Stage Focus']||'',
+        'Gender Lens':r['Gender Lens']||r['Gender-Lens']||r['Gender-lens']||r['Gender']||'',
+        Programs:r.Programs||r['Program(s)']||r['Programs Offered']||r['Programs and Initiatives']||'',
+        About:r.About||r['About / Description']||r['Description']||'',
+        Website:r.Website||r['Website / Link']||r['Link']||'',
+        Email:r.Email||r['Contact Email']||'',
+        Contact:r.Contact||r['Contact Person']||'',
+        'Flagship Programs':r['Flagship Program/s']||r['Flagship Programs']||r['Flagship Program']||r['Flagship']||'',
+        'Provides Funding':r['Provides Funding']||r['Provide Funding']||r['Funding Provided']||r['Funding?']||r['Funding (Yes/No)']||r['Funding']||'',
+        'Funding Type':r['Funding Type']||r['Type of Funding']||r['Funding Types']||'',
+        'Portfolio Enterprises':r['Portfolio Enterprises']||r['Portfolio']||r['Portfolio Companies']||''
+      }));
+
+      mapSheet=s2.map(r=>({
+        ESO:r.ESO||r['ESO Name']||r['Name']||'',
+        AreaType:(r.AreaType||r['Area Type']||'').toString().toLowerCase(),
+        AreaNames:r.AreaNames||r['Area Names']||r['Area']||'',
+        PSGC_Codes:r.PSGC_Codes||r['PSGC Codes']||r['PSGC']||r['Code']||'',
+        Pin_Lat:r.Pin_Lat||r['Lat']||r['Latitude']||'',
+        Pin_Lon:r.Pin_Lon||r['Lon']||r['Longitude']||'',
+        Notes:r.Notes||r['Notes / Remarks']||'',
+        SourceURL:r.SourceURL||r['Source URL']||r['URL']||r['Link']||''
+      }));
+
+      merged=mergeRows(detailsSheet,mapSheet); populateFilters(merged); renderList(merged);
+      setStatus('Loaded data.');
+      showOverviewPins();
     }
 
     async function tryLoadFromConfig(){
@@ -500,15 +521,20 @@
         const r=await fetch('data_sources.json',{cache:'no-store'});
         if(!r.ok){ setStatus('No data_sources.json found; trying built-in data…'); return tryPreloadBuiltins(); }
         const cfg=await r.json();
-        if(cfg.mode==='gsheets' && cfg.gsheets?.detailsCSV && cfg.gsheets?.areaCSV) return tryLoadGoogleSheets(cfg.gsheets.detailsCSV,cfg.gsheets.areaCSV);
+        if(cfg.mode==='gsheets' && cfg.gsheets?.detailsCSV && cfg.gsheets?.areaCSV){
+          return tryLoadGoogleSheets(cfg.gsheets.detailsCSV, cfg.gsheets.areaCSV);
+        }
         return tryPreloadBuiltins();
-      }catch(e){ setStatus('Could not load config; falling back to built-in data.'); return tryPreloadBuiltins(); }
+      }catch(e){
+        setStatus('Could not load config; falling back to built-in data.');
+        return tryPreloadBuiltins();
+      }
     }
 
     // =====================
     // Wiring UI
     // =====================
-    document.getElementById('btnApply').addEventListener('click', async ()=>{
+    document.getElementById('btnApply').addEventListener('click', ()=>{
       const sel=el=>Array.from(el.selectedOptions).map(o=>o.value);
       currentFilters.text=document.getElementById('searchInput').value||'';
       currentFilters.types=sel(document.getElementById('filterType'));
@@ -516,26 +542,21 @@
       currentFilters.stages=sel(document.getElementById('filterStage'));
       currentFilters.areaTypes=sel(document.getElementById('filterAreaType'));
       currentFilters.gender=document.getElementById('filterGender').value||'';
-      const rows=applyFilters(); renderList(rows);
-      clearMap();
-      // Overview: show pins only; boundaries are drawn when an ESO is selected
-      for(const r of rows){
-        const latList=multiList(r.Pin_Lat).map(parseFloat);
-        const lonList=multiList(r.Pin_Lon).map(parseFloat);
-        for(let i=0;i<Math.max(latList.length,lonList.length);i++){
-          if(isNum(latList[i])&&isNum(lonList[i])) pin(latList[i],lonList[i],r.AreaNames,r.ESO,false);
-        }
-      }
+      selectedESO = null;       // back to overview on Apply
+      showOverviewPins();
     });
 
     document.getElementById('btnReset').addEventListener('click', ()=>{
       currentFilters={ text:'', types:[], sectors:[], stages:[], areaTypes:[], gender:'' };
       document.getElementById('searchInput').value='';
       ['filterType','filterSector','filterStage','filterAreaType'].forEach(id=>{ const el=document.getElementById(id); Array.from(el.options).forEach(o=>o.selected=false); });
-      document.getElementById('filterGender').value=''; renderList(merged); clearMap();
+      document.getElementById('filterGender').value='';
+      selectedESO = null;
+      renderList(merged);
+      showOverviewPins();
     });
 
-    // Kick-off
+    // Kick things off
     initMap();
     tryLoadFromConfig();
     feather.replace();

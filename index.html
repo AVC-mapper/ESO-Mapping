@@ -38,7 +38,7 @@
       font-weight: 600;
       font-size: 12px;
       box-shadow: 0 6px 16px rgba(0,0,0,.15);
-      pointer-events: none; /* don’t steal mouse */
+      pointer-events: none;
     }
   </style>
 </head>
@@ -61,7 +61,7 @@
 
     <!-- Sidebar -->
     <aside class="lg:col-span-1 space-y-4">
-      <!-- Legend (top) -->
+      <!-- Legend -->
       <section class="bg-white card shadow-soft p-4">
         <h2 class="font-semibold mb-2">Legend</h2>
         <ul class="text-sm text-gray-600 space-y-1">
@@ -115,7 +115,7 @@
         </div>
       </section>
 
-      <!-- Data status (no uploads) -->
+      <!-- Data status -->
       <section class="bg-white card shadow-soft p-4">
         <h2 class="font-semibold mb-1">Data</h2>
         <div id="dataUpdated" class="text-sm text-gray-700">Date updated: —</div>
@@ -137,7 +137,7 @@
           <div id="esoList" class="overflow-auto" style="max-height: 60vh;"></div>
         </div>
 
-        <!-- ESO Details -->
+        <!-- Details -->
         <div class="lg:col-span-2 bg-white card shadow-soft p-4">
           <h2 class="font-semibold mb-3">Details</h2>
           <div id="details" class="text-sm text-gray-700">
@@ -183,7 +183,7 @@
       highlightLayerGroup = L.layerGroup().addTo(map);
       markersGroup = L.layerGroup().addTo(map);
 
-      // Clicking the basemap toggles back to overview
+      // Clicking the basemap returns to overview mode (all pins)
       map.on('click', () => {
         selectedESO = null;
         renderDetails(null);
@@ -192,31 +192,47 @@
     }
 
     // =====================
-    // PSGC centroids (expand as needed)
+    // PSGC centroids (expandable)
     // =====================
-    // Regions (ADM1)
+    // Regions (ADM1) – FULL list
     const REGION_CENTROIDS = {
-      '0100000000':[16.0,120.5], '0200000000':[17.2,121.7], '0300000000':[15.0,120.9],
-      '0400000000':[14.1,121.2], '0500000000':[13.4,123.5], '0600000000':[10.7,122.5],
-      '0700000000':[9.7,123.9],  '0800000000':[11.2,124.9], '0900000000':[7.3,122.1],
-      '1000000000':[8.3,124.7],  '1100000000':[7.1,125.6],  '1200000000':[6.9,124.7],
-      '1300000000':[14.6,121.0], '1400000000':[17.0,121.0], '1500000000':[7.2,124.3],
-      '1600000000':[8.6,125.9],  '1700000000':[12.5,121.0],
-      // Some sheets use 1900000000 for BARMM – map it to 1500000000
+      '0100000000':[16.0,120.5],  // Ilocos
+      '0200000000':[17.2,121.7],  // Cagayan Valley
+      '0300000000':[15.0,120.9],  // Central Luzon
+      '0400000000':[14.1,121.2],  // CALABARZON
+      '0500000000':[13.4,123.5],  // Bicol
+      '0600000000':[10.7,122.5],  // Western Visayas
+      '0700000000':[9.7,123.9],   // Central Visayas
+      '0800000000':[11.2,124.9],  // Eastern Visayas
+      '0900000000':[7.3,122.1],   // Zamboanga Peninsula
+      '1000000000':[8.3,124.7],   // Northern Mindanao
+      '1100000000':[7.1,125.6],   // Davao Region
+      '1200000000':[6.9,124.7],   // SOCCSKSARGEN
+      '1300000000':[14.6,121.0],  // NCR
+      '1400000000':[17.0,121.0],  // CAR
+      '1500000000':[7.2,124.3],   // BARMM
+      '1600000000':[8.6,125.9],   // Caraga
+      '1700000000':[12.5,121.0],  // MIMAROPA
+      // Some sheets use 1900000000 for BARMM — treat as BARMM centroid
       '1900000000':[7.2,124.3]
     };
 
-    // Provinces (ADM2) — add as needed
+    // Provinces (ADM2) — add as needed (fallback if lat/lon missing)
     const PROVINCE_CENTROIDS = {
       '041000000':[13.99,121.17], // Batangas
       '042100000':[14.28,120.89], // Cavite
       '043400000':[14.18,121.29], // Laguna
       '051700000':[13.14,123.53], // Albay
-      '060400000':[11.58,122.75], // Iloilo (example)
+      '060400000':[11.58,122.75], // Iloilo
+      '118200000':[6.83,125.41],  // Davao del Sur (approx)
+      '126500000':[6.61,124.86],  // South Cotabato (approx)
+      '052700000':[12.55,124.04], // Northern Samar (approx)
+      '052900000':[12.00,124.84], // Eastern Samar (approx)
+      '035400000':[15.48,120.59], // Tarlac (approx)
       '133000000':[14.60,121.00]  // Manila, prov-equivalent
     };
 
-    // Cities / Municipalities (ADM3) — common ones you use
+    // Cities / Municipalities (ADM3) — common ones
     const CITY_CENTROIDS = {
       '137404000':[14.6760,121.0437], // Quezon City
       '137602000':[14.5547,121.0244], // Makati
@@ -238,12 +254,11 @@
     // =====================
     const toKey = s => (s||'').toString().trim().toLowerCase();
     const isNum = v => !(v===null || v===undefined || v==='') && !isNaN(parseFloat(v));
-    function multiList(val){ return String(val||'').split(/[;,\n]/).map(s=>s.trim()).filter(Boolean); }
+    const multi = val => String(val||'').split(/[;,\n]/).map(s=>s.trim()).filter(Boolean);
     function arrayify(val){ if(!val) return []; if(Array.isArray(val)) return val; return String(val).split(/[,;/\n]/).map(s=>s.trim()).filter(Boolean); }
     function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
     function buildOptions(selectEl, values){ selectEl.innerHTML=''; uniq(values).sort((a,b)=>a.localeCompare(b)).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; selectEl.appendChild(o); }); }
 
-    // Admin-level from PSGC code
     function levelFromPSGC(code){
       const c = String(code||'').trim().toUpperCase();
       if (!c) return null;
@@ -251,27 +266,22 @@
       if (REGION_CENTROIDS[c])   return 'region';
       if (CITY_CENTROIDS[c])     return 'city_muni';
       if (PROVINCE_CENTROIDS[c]) return 'province';
-      // heuristics
+      // simple heuristics
       if (c.length>=10) return 'region';
-      if (c.length===9 && c.endsWith('000')) return 'province';
+      if (c.length===9 && /000$/.test(c)) return 'province';
       if (c.length===9) return 'city_muni';
-      if (c.length===8) return 'province';
       return null;
     }
-
-    // Radius (km) per admin level; used for each PSGC independently
     function radiusKmForCode(code, fallbackAreaType=''){
       const lvl = levelFromPSGC(code) || (fallbackAreaType||'').toLowerCase();
       switch(lvl){
-        case 'country':  return 400; // (unused—country uses polygon/rect)
-        case 'region':   return 140;
-        case 'province': return 45;
-        case 'city_muni':return 12;
-        default:         return 20;
+        case 'country':   return 400;
+        case 'region':    return 170;
+        case 'province':  return 60;
+        case 'city_muni': return 15;
+        default:          return 20;
       }
     }
-
-    // Centroid lookup for a PSGC code; fall back to null
     function centroidForPSGC(code){
       const c = String(code||'').trim().toUpperCase();
       if (!c) return null;
@@ -280,7 +290,7 @@
     }
 
     // =====================
-    // Rendering: List & Details
+    // Filters, List & Details
     // =====================
     function applyFilters(){
       const text=currentFilters.text.toLowerCase(), tset=new Set(currentFilters.types), sset=new Set(currentFilters.sectors), stset=new Set(currentFilters.stages), atset=new Set(currentFilters.areaTypes), gender=(currentFilters.gender||'').toLowerCase();
@@ -325,67 +335,83 @@
     }
 
     // =====================
-    // Map drawing
+    // Map drawing (hybrid)
     // =====================
     function clearMap(){ highlightLayerGroup.clearLayers(); markersGroup.clearLayers(); }
 
-    async function shadePhilippines(){
-      // simple rectangle fallback to keep it fast/light
-      const rect=L.rectangle(PH_BOUNDS,{color:villgroColor,weight:2,fillOpacity:0.15}).addTo(highlightLayerGroup);
-      map.fitBounds(rect.getBounds(),{padding:[20,20]});
+    // PH rectangle (simple + fast) — non-interactive
+    function shadePhilippines(){
+      const rect=L.rectangle(PH_BOUNDS,{
+        interactive: false,
+        color:villgroColor,weight:2,fillOpacity:0.15
+      }).addTo(highlightLayerGroup);
       return rect;
     }
 
-    function pin(lat, lon, label, eso, zoomOnClick=true){
+    // PIN: stop event propagation so it never triggers map click handler
+    function pin(lat, lon, label, eso, zoomOnClick = true){
       if(!isNum(lat)||!isNum(lon)) return null;
       const m=L.circleMarker([+lat,+lon],{
         radius:7,weight:2,color:villgroColor,fillColor:villgroColor,fillOpacity:0.85
       }).addTo(markersGroup);
-      // Nice hover tooltip
+
       m.bindTooltip(eso||label||'ESO',{direction:'top',offset:[0,-8],sticky:true,className:'eso-tooltip'});
-      // Click -> zoom & details
-      m.on('click',()=>{
+
+      const stop = (e) => {
+        if (!e) return;
+        if (e.originalEvent && e.originalEvent.stopPropagation) e.originalEvent.stopPropagation();
+        L.DomEvent.stopPropagation(e);
+        L.DomEvent.preventDefault(e);
+      };
+
+      m.on('click',(e)=>{
+        stop(e);
         if(zoomOnClick) map.setView(m.getLatLng(), 12, { animate:true });
         selectESO(eso);
       });
-      // Popup on tap/mobile
+      m.on('mousedown', stop);
+      m.on('dblclick', stop);
+      m.on('touchstart', stop);
+
       m.bindPopup(`<div class='text-sm'><div class='font-semibold mb-1'>${eso||label||'ESO'}</div><div>${label||''}</div></div>`);
       return m;
     }
 
+    // Coverage circle — non-interactive so empty clicks reset to overview
     function drawCircle(lat, lon, km=20){
       if(!isNum(lat)||!isNum(lon)) return null;
       return L.circle([+lat,+lon],{
+        interactive: false,
         radius: km*1000, weight:2, color:villgroColor, fillColor:villgroColor, fillOpacity:0.12
       }).addTo(highlightLayerGroup);
     }
 
-    // Show all pins for filtered rows (overview mode)
+    // Overview: just HQ pins for filtered rows
     function showOverviewPins(){
       clearMap();
       const rows = applyFilters();
       renderList(rows);
-      const bounds = [];
+      const latlngs = [];
       rows.forEach(r=>{
-        const lats = multiList(r.Pin_Lat).map(parseFloat);
-        const lons = multiList(r.Pin_Lon).map(parseFloat);
+        const lats = multi(r.Pin_Lat).map(parseFloat);
+        const lons = multi(r.Pin_Lon).map(parseFloat);
         for(let i=0;i<Math.max(lats.length,lons.length);i++){
           if(isNum(lats[i]) && isNum(lons[i])){
-            const mk = pin(lats[i], lons[i], r.AreaNames, r.ESO, false);
-            if(mk) bounds.push(L.latLngBounds([mk.getLatLng(), mk.getLatLng()]));
+            const mk = pin(lats[i], lons[i], r.AreaNames || 'HQ', r.ESO, false);
+            if(mk) latlngs.push(mk.getLatLng());
           }
         }
       });
-      if(bounds.length){
-        let bb = bounds[0]; for(let i=1;i<bounds.length;i++) bb = bb.extend(bounds[i]);
+      if(latlngs.length){
+        const bb = L.latLngBounds(latlngs);
         map.fitBounds(bb.pad(0.2));
       } else {
         map.setView(PH_CENTER, 5.6);
       }
     }
 
-    // Select a single ESO: draw coverage (radii per PSGC) + HQ pins
-    async function selectESO(esoName){
+    // Selected ESO: draw coverage per PSGC + pins
+    function selectESO(esoName){
       selectedESO = esoName;
       const row = merged.find(r=>toKey(r.ESO)===toKey(esoName)); if(!row) return;
 
@@ -393,26 +419,29 @@
       clearMap();
 
       const areaType = (row.AreaType||'').toLowerCase();
-      const codes = multiList(row.PSGC_Codes);
-      const lats  = multiList(row.Pin_Lat).map(parseFloat);
-      const lons  = multiList(row.Pin_Lon).map(parseFloat);
-      const bounds = [];
+      const codes = multi(row.PSGC_Codes);
+      const lats  = multi(row.Pin_Lat).map(parseFloat);
+      const lons  = multi(row.Pin_Lon).map(parseFloat);
+      const latlngs = [];
 
-      // PH coverage if flagged
-      if(areaType==='country' || codes.includes('PH') || codes.includes('ph')){
-        const ph = await shadePhilippines();
-        if (ph && ph.getBounds) bounds.push(ph.getBounds());
+      // Philippines coverage if indicated
+      if(areaType==='country' || codes.some(c=>String(c).trim().toUpperCase()==='PH')){
+        const phRect = shadePhilippines();
+        latlngs.push(phRect.getBounds().getNorthWest(), phRect.getBounds().getSouthEast());
       }
 
-      // Draw a radius per PSGC code (region/province/city), mixing allowed
+      // Draw a circle for each PSGC code (region/province/city)
       codes.forEach((code, idx)=>{
         const c = String(code||'').trim().toUpperCase();
         if(!c || c==='PH') return;
-        const center = centroidForPSGC(c) || (isNum(lats[idx])&&isNum(lons[idx]) ? [lats[idx], lons[idx]] : (isNum(lats[0])&&isNum(lons[0]) ? [lats[0], lons[0]] : null));
-        if(center){
+        const centroid = centroidForPSGC(c) || (isNum(lats[idx])&&isNum(lons[idx]) ? [lats[idx], lons[idx]] : (isNum(lats[0])&&isNum(lons[0]) ? [lats[0], lons[0]] : null));
+        if(centroid){
           const km = radiusKmForCode(c, areaType);
-          const circ = drawCircle(center[0], center[1], km);
-          if(circ) bounds.push(circ.getBounds());
+          const circ = drawCircle(centroid[0], centroid[1], km);
+          if(circ){
+            const b = circ.getBounds();
+            latlngs.push(b.getNorthWest(), b.getSouthEast());
+          }
         }
       });
 
@@ -420,14 +449,16 @@
       for(let i=0;i<Math.max(lats.length,lons.length);i++){
         if(isNum(lats[i]) && isNum(lons[i])){
           const mk = pin(lats[i], lons[i], row.AreaNames || 'HQ', row.ESO, true);
-          if(mk) bounds.push(L.latLngBounds([mk.getLatLng(), mk.getLatLng()]));
+          if(mk) latlngs.push(mk.getLatLng());
         }
       }
 
-      // Fit to what we drew
-      if(bounds.length){
-        let bb=bounds[0]; for(let i=1;i<bounds.length;i++) bb = bb.extend(bounds[i]);
+      // Fit
+      if(latlngs.length){
+        const bb = L.latLngBounds(latlngs);
         map.fitBounds(bb.pad(0.2));
+      } else {
+        map.setView(PH_CENTER, 5.6);
       }
     }
 
@@ -453,7 +484,7 @@
       buildOptions(document.getElementById('filterStage'),stages);
     }
 
-    // Built-in JSON fallback (optional)
+    // Built-in JSON fallback
     async function tryPreloadBuiltins(){
       try{
         const [d,a]=await Promise.all([fetch('esos_details.json',{cache:'no-store'}), fetch('esos_area.json',{cache:'no-store'})]);
@@ -489,7 +520,7 @@
         Sectors:r.Sectors||r['Sector']||r['Sector/Focus']||r['Sectors Covered']||r['Focus Sectors']||r['Focus Sector(s)']||r['Industries']||r['Industry']||r['Verticals']||r['Sector(s)']||'',
         Stage:r.Stage||r['Stages']||r['Stage Focus']||'',
         'Gender Lens':r['Gender Lens']||r['Gender-Lens']||r['Gender-lens']||r['Gender']||'',
-        Programs:r.Programs||r['Program(s)']||r['Programs Offered']||r['Programs and Initiatives']||'',
+        Programs:r.Programs||r['Programs and Initiatives']||r['Program(s)']||r['Programs Offered']||'',
         About:r.About||r['About / Description']||r['Description']||'',
         Website:r.Website||r['Website / Link']||r['Link']||'',
         Email:r.Email||r['Contact Email']||'',
@@ -542,7 +573,7 @@
       currentFilters.stages=sel(document.getElementById('filterStage'));
       currentFilters.areaTypes=sel(document.getElementById('filterAreaType'));
       currentFilters.gender=document.getElementById('filterGender').value||'';
-      selectedESO = null;       // back to overview on Apply
+      selectedESO = null;
       showOverviewPins();
     });
 
@@ -556,7 +587,7 @@
       showOverviewPins();
     });
 
-    // Kick things off
+    // Kickoff
     initMap();
     tryLoadFromConfig();
     feather.replace();

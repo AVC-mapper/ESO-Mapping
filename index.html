@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- SheetJS for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <!-- Icons (only for other feather usage; social icons are inline SVG below) -->
+  <!-- Icons (feather still used elsewhere if needed) -->
   <script src="https://unpkg.com/feather-icons"></script>
   <style>
     :root { --villgro: #08842a; }
@@ -75,7 +75,7 @@
 
     <!-- Sidebar -->
     <aside class="lg:col-span-1 space-y-4">
-      <!-- How to use (sidebar) -->
+      <!-- How to use (single copy here) -->
       <section class="bg-white card shadow-soft p-4">
         <p class="text-sm text-gray-700">
           Use the search bar and filters on the left panel to explore Entrepreneurial Support Organizations (ESOs) by type, stage, sector, or location.
@@ -149,17 +149,7 @@
 
     <!-- Map + List -->
     <section class="lg:col-span-3 space-y-4">
-
-      <!-- How to use (map side) -->
-      <section class="bg-white card shadow-soft p-4">
-        <p class="text-sm text-gray-700">
-          Use the search bar and filters on the left panel to explore Entrepreneurial Support Organizations (ESOs) by type, stage, sector, or location.
-          The map shows ESO headquarters as green pins and their coverage areas as outlines. Click on a pin to view details about a specific ESO,
-          including its focus and programs. To return to the original map view, simply click anywhere outside the pin or map.
-          You can also click on different ESOs in the ESO dropdown section.
-        </p>
-      </section>
-
+      <!-- (Removed duplicate “How to use” block from here) -->
       <div id="map" class="bg-white card shadow-soft"></div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -227,32 +217,27 @@
     }
 
     // =====================
-    // PSGC centroids (expandable)
+    // PSGC centroids
     // =====================
-    // Regions (ADM1) – FULL list
     const REGION_CENTROIDS = {
-      '0100000000':[16.0,120.5],  '0200000000':[17.2,121.7],  '0300000000':[15.0,120.9],
-      '0400000000':[14.1,121.2],  '0500000000':[13.4,123.5],  '0600000000':[10.7,122.5],
-      '0700000000':[9.7,123.9],   '0800000000':[11.2,124.9],  '0900000000':[7.3,122.1],
-      '1000000000':[8.3,124.7],   '1100000000':[7.1,125.6],   '1200000000':[6.9,124.7],
-      '1300000000':[14.6,121.0],  '1400000000':[17.0,121.0],  '1500000000':[7.2,124.3],
-      '1600000000':[8.6,125.9],   '1700000000':[12.5,121.0],  '1900000000':[7.2,124.3]
+      '0100000000':[16.0,120.5],'0200000000':[17.2,121.7],'0300000000':[15.0,120.9],
+      '0400000000':[14.1,121.2],'0500000000':[13.4,123.5],'0600000000':[10.7,122.5],
+      '0700000000':[9.7,123.9], '0800000000':[11.2,124.9],'0900000000':[7.3,122.1],
+      '1000000000':[8.3,124.7],'1100000000':[7.1,125.6],'1200000000':[6.9,124.7],
+      '1300000000':[14.6,121.0],'1400000000':[17.0,121.0],'1500000000':[7.2,124.3],
+      '1600000000':[8.6,125.9],'1700000000':[12.5,121.0],'1900000000':[7.2,124.3]
     };
-
-    // Provinces (ADM2)
     const PROVINCE_CENTROIDS = {
-      '041000000':[13.99,121.17], '042100000':[14.28,120.89], '043400000':[14.18,121.29],
-      '051700000':[13.14,123.53], '060400000':[11.58,122.75], '118200000':[6.83,125.41],
-      '126500000':[6.61,124.86],  '052700000':[12.55,124.04], '052900000':[12.00,124.84],
-      '035400000':[15.48,120.59], '133000000':[14.60,121.00]
+      '041000000':[13.99,121.17],'042100000':[14.28,120.89],'043400000':[14.18,121.29],
+      '051700000':[13.14,123.53],'060400000':[11.58,122.75],'118200000':[6.83,125.41],
+      '126500000':[6.61,124.86],'052700000':[12.55,124.04],'052900000':[12.00,124.84],
+      '035400000':[15.48,120.59],'133000000':[14.60,121.00]
     };
-
-    // Cities / Municipalities (ADM3)
     const CITY_CENTROIDS = {
-      '137404000':[14.6760,121.0437], '137602000':[14.5547,121.0244], '137403000':[14.5760,121.0850],
-      '137401000':[14.5794,121.0359], '133900000':[14.5995,120.9842], '137607000':[14.5176,121.0509],
-      '072217000':[10.3157,123.8854], '043403000':[14.3430,121.0810], '041031000':[14.0836,121.1497],
-      '103504000':[8.2280,124.2450],  '160202000':[8.9475,125.5406],  '051724000':[13.6217,123.1948],
+      '137404000':[14.6760,121.0437],'137602000':[14.5547,121.0244],'137403000':[14.5760,121.0850],
+      '137401000':[14.5794,121.0359],'133900000':[14.5995,120.9842],'137607000':[14.5176,121.0509],
+      '072217000':[10.3157,123.8854],'043403000':[14.3430,121.0810],'041031000':[14.0836,121.1497],
+      '103504000':[8.2280,124.2450],'160202000':[8.9475,125.5406],'051724000':[13.6217,123.1948],
       '050170000':[13.1372,123.7344]
     };
 
@@ -265,6 +250,8 @@
     function arrayify(val){ if(!val) return []; if(Array.isArray(val)) return val; return String(val).split(/[,;/\n]/).map(s=>s.trim()).filter(Boolean); }
     function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
     function buildOptions(selectEl, values){ selectEl.innerHTML=''; uniq(values).sort((a,b)=>a.localeCompare(b)).forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; selectEl.appendChild(o); }); }
+    function looksLikeUrl(s){ return /^https?:\/\//i.test(s||''); }
+    function looksLikeEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s||'').trim()); }
 
     function levelFromPSGC(code){
       const c = String(code||'').trim().toUpperCase();
@@ -329,6 +316,11 @@
         wrap.innerHTML='<p class="text-gray-500">Select an ESO from the list or click a marker on the map to see details here.</p>';
         return;
       }
+
+      // Decide if "Contact" is a URL/email (then show as chip, not as data tile)
+      const contactRaw = (row.ContactLink || row.Contact || '').trim();
+      const hasContactUrl = looksLikeUrl(contactRaw) || /^mailto:/i.test(contactRaw) || looksLikeEmail(contactRaw);
+
       const fields=[
         ['About','About'],
         ['Flagship Program/s','Flagship Programs'],
@@ -341,9 +333,11 @@
         ['Stage','Stage'],
         ['Gender Lens','Gender Lens'],
         ['Email','Email'],
-        ['Contact','Contact'],
+        // Only show "Contact" tile if it's not a link/email (i.e., a contact person)
+        ...(hasContactUrl ? [] : [['Contact','Contact']]),
         ['Notes','Notes']
       ];
+
       const site=(row.Website||row.SourceURL||'').trim();
       const siteBtn=site?`<a class="pill active text-sm link" target="_blank" rel="noreferrer" href="${site}">Visit site</a>`:'';
       let html=`<div class="flex items-start justify-between gap-2"><div><h3 class="text-xl font-semibold">${row.ESO||''}</h3><div class="text-xs text-gray-500">Area: <span class="font-medium">${labelAreaType(row.AreaType)||''}</span> — ${row.AreaNames||''}</div></div>${siteBtn}</div>`;
@@ -363,10 +357,13 @@
       /* --- Bottom-left social/contact actions (with inline SVG icons) --- */
       const fb = (row.Facebook || '').trim();
       const li = (row.LinkedIn || '').trim();
-      const contactUrl = (row.ContactLink || '').trim();
-      const email = (row.Email || '').trim();
+      // prefer ContactLink if present; otherwise, use Contact if it's link/email
+      let contactHref = '';
+      if (looksLikeUrl(row.ContactLink)) contactHref = row.ContactLink.trim();
+      else if (looksLikeUrl(row.Contact)) contactHref = row.Contact.trim();
+      else if (looksLikeEmail(row.Contact)) contactHref = `mailto:${row.Contact.trim()}`;
+      else if (looksLikeEmail(row.Email)) contactHref = `mailto:${row.Email.trim()}`;
 
-      // Simple SVGs
       const svgFacebook = `
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path fill="currentColor" d="M22 12.07C22 6.48 17.52 2 11.93 2S1.86 6.48 1.86 12.07c0 5 3.66 9.16 8.44 9.93v-7.03H7.9v-2.9h2.4v-2.21c0-2.37 1.41-3.68 3.57-3.68 1.03 0 2.11.18 2.11.18v2.32h-1.19c-1.17 0-1.54.73-1.54 1.48v1.92h2.63l-.42 2.9h-2.21V22c4.78-.77 8.44-4.93 8.44-9.93z"/>
@@ -383,11 +380,7 @@
       const actions = [];
       if (fb) actions.push(`<a class="btn-chip link" target="_blank" rel="noreferrer" href="${fb}" aria-label="Open Facebook">${svgFacebook}<span>Facebook</span></a>`);
       if (li) actions.push(`<a class="btn-chip link" target="_blank" rel="noreferrer" href="${li}" aria-label="Open LinkedIn">${svgLinkedIn}<span>LinkedIn</span></a>`);
-      if (contactUrl) {
-        actions.push(`<a class="btn-chip link" target="_blank" rel="noreferrer" href="${contactUrl}" aria-label="Open contact page">${svgEmail}<span>Contact</span></a>`);
-      } else if (email) {
-        actions.push(`<a class="btn-chip link" href="mailto:${email}" aria-label="Send email">${svgEmail}<span>Email</span></a>`);
-      }
+      if (contactHref) actions.push(`<a class="btn-chip link" target="_blank" rel="noreferrer" href="${contactHref}" aria-label="Contact">${svgEmail}<span>Contact</span></a>`);
 
       if (actions.length) {
         html += `<div class="mt-4 flex flex-wrap gap-2">${actions.join('')}</div>`;
@@ -401,54 +394,35 @@
     // =====================
     function clearMap(){ highlightLayerGroup.clearLayers(); markersGroup.clearLayers(); }
 
-    // PH rectangle (simple + fast) — non-interactive
     function shadePhilippines(){
-      const rect=L.rectangle(PH_BOUNDS,{
-        interactive: false,
-        color:villgroColor,weight:2,fillOpacity:0.15
-      }).addTo(highlightLayerGroup);
+      const rect=L.rectangle(PH_BOUNDS,{ interactive:false, color:villgroColor, weight:2, fillOpacity:0.15 }).addTo(highlightLayerGroup);
       return rect;
     }
 
-    // PIN: stop event propagation so it never triggers map click handler
     function pin(lat, lon, label, eso, zoomOnClick = true){
       if(!isNum(lat)||!isNum(lon)) return null;
-      const m=L.circleMarker([+lat,+lon],{
-        radius:7,weight:2,color:villgroColor,fillColor:villgroColor,fillOpacity:0.85
-      }).addTo(markersGroup);
+      const m=L.circleMarker([+lat,+lon],{ radius:7, weight:2, color:villgroColor, fillColor:villgroColor, fillOpacity:0.85 }).addTo(markersGroup);
 
       m.bindTooltip(eso||label||'ESO',{direction:'top',offset:[0,-8],sticky:true,className:'eso-tooltip'});
 
       const stop = (e) => {
         if (!e) return;
         if (e.originalEvent && e.originalEvent.stopPropagation) e.originalEvent.stopPropagation();
-        L.DomEvent.stopPropagation(e);
-        L.DomEvent.preventDefault(e);
+        L.DomEvent.stopPropagation(e); L.DomEvent.preventDefault(e);
       };
 
-      m.on('click',(e)=>{
-        stop(e);
-        if(zoomOnClick) map.setView(m.getLatLng(), 12, { animate:true });
-        selectESO(eso);
-      });
-      m.on('mousedown', stop);
-      m.on('dblclick', stop);
-      m.on('touchstart', stop);
+      m.on('click',(e)=>{ stop(e); if(zoomOnClick) map.setView(m.getLatLng(), 12, { animate:true }); selectESO(eso); });
+      m.on('mousedown', stop); m.on('dblclick', stop); m.on('touchstart', stop);
 
       m.bindPopup(`<div class='text-sm'><div class='font-semibold mb-1'>${eso||label||'ESO'}</div><div>${label||''}</div></div>`);
       return m;
     }
 
-    // Coverage circle — non-interactive so empty clicks reset to overview
     function drawCircle(lat, lon, km=20){
       if(!isNum(lat)||!isNum(lon)) return null;
-      return L.circle([+lat,+lon],{
-        interactive: false,
-        radius: km*1000, weight:2, color:villgroColor, fillColor:villgroColor, fillOpacity:0.12
-      }).addTo(highlightLayerGroup);
+      return L.circle([+lat,+lon],{ interactive:false, radius: km*1000, weight:2, color:villgroColor, fillColor:villgroColor, fillOpacity:0.12 }).addTo(highlightLayerGroup);
     }
 
-    // Overview: just HQ pins for filtered rows
     function showOverviewPins(){
       clearMap();
       const rows = applyFilters();
@@ -472,7 +446,6 @@
       }
     }
 
-    // Selected ESO: draw coverage per PSGC + pins
     function selectESO(esoName){
       selectedESO = esoName;
       const row = merged.find(r=>toKey(r.ESO)===toKey(esoName)); if(!row) return;
@@ -572,26 +545,35 @@
       const s1=XLSX.utils.sheet_to_json(dwb.Sheets[dwb.SheetNames[0]],{defval:''}).map(normalizeColumns);
       const s2=XLSX.utils.sheet_to_json(awb.Sheets[awb.SheetNames[0]],{defval:''}).map(normalizeColumns);
 
-      // include new social/contact columns
-      detailsSheet = s1.map(r => ({
-        ESO: r.ESO || r['ESO Name'] || r['Name'] || r['Organization'] || '',
-        Type: r.Type || r['ESO Type'] || r['Type(s)'] || r['Type of ESO'] || '',
-        Sectors: r.Sectors || r['Sector'] || r['Sector/Focus'] || r['Sectors Covered'] || r['Focus Sectors'] || r['Focus Sector(s)'] || r['Industries'] || r['Industry'] || r['Verticals'] || r['Sector(s)'] || '',
-        Stage: r.Stage || r['Stages'] || r['Stage Focus'] || '',
-        'Gender Lens': r['Gender Lens'] || r['Gender-Lens'] || r['Gender-lens'] || r['Gender'] || '',
-        Programs: r.Programs || r['Programs and Initiatives'] || r['Program(s)'] || r['Programs Offered'] || '',
-        About: r.About || r['About / Description'] || r['Description'] || '',
-        Website: r.Website || r['Website / Link'] || r['Link'] || '',
-        Email: r.Email || r['Contact Email'] || '',
-        Contact: r.Contact || r['Contact Person'] || '',
-        'Flagship Programs': r['Flagship Program/s'] || r['Flagship Programs'] || r['Flagship Program'] || r['Flagship'] || '',
-        'Provides Funding': r['Provides Funding'] || r['Provide Funding'] || r['Funding Provided'] || r['Funding?'] || r['Funding (Yes/No)'] || r['Funding'] || '',
-        'Funding Type': r['Funding Type'] || r['Type of Funding'] || r['Funding Types'] || '',
-        'Portfolio Enterprises': r['Portfolio Enterprises'] || r['Portfolio'] || r['Portfolio Companies'] || '',
-        Facebook: r.Facebook || r['Facebook Page'] || r['Facebook URL'] || '',
-        LinkedIn: r.LinkedIn || r['LinkedIn Page'] || r['LinkedIn URL'] || r['LinkedIn'] || '',
-        ContactLink: r['Contact Us'] || r['Contact URL'] || r['Contact Link'] || ''
-      }));
+      // Include social/contact columns and handle "Contact" as link/email
+      detailsSheet = s1.map(r => {
+        const contactRaw = (r['Contact Us'] || r['Contact URL'] || r['Contact Link'] || r['Contact'] || '').toString().trim();
+        const emailRaw = (r['Email'] || r['Contact Email'] || '').toString().trim();
+        const computedContactLink =
+          (/^https?:\/\//i.test(contactRaw) ? contactRaw :
+           (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactRaw) ? `mailto:${contactRaw}` :
+            (emailRaw && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) ? `mailto:${emailRaw}` : '')));
+
+        return {
+          ESO: r.ESO || r['ESO Name'] || r['Name'] || r['Organization'] || '',
+          Type: r.Type || r['ESO Type'] || r['Type(s)'] || r['Type of ESO'] || '',
+          Sectors: r.Sectors || r['Sector'] || r['Sector/Focus'] || r['Sectors Covered'] || r['Focus Sectors'] || r['Focus Sector(s)'] || r['Industries'] || r['Industry'] || r['Verticals'] || r['Sector(s)'] || '',
+          Stage: r.Stage || r['Stages'] || r['Stage Focus'] || '',
+          'Gender Lens': r['Gender Lens'] || r['Gender-Lens'] || r['Gender-lens'] || r['Gender'] || '',
+          Programs: r.Programs || r['Programs and Initiatives'] || r['Program(s)'] || r['Programs Offered'] || '',
+          About: r.About || r['About / Description'] || r['Description'] || '',
+          Website: r.Website || r['Website / Link'] || r['Link'] || '',
+          Email: emailRaw,
+          Contact: r.Contact || r['Contact Person'] || '',       // for contact person (non-link)
+          'Flagship Programs': r['Flagship Program/s'] || r['Flagship Programs'] || r['Flagship Program'] || r['Flagship'] || '',
+          'Provides Funding': r['Provides Funding'] || r['Provide Funding'] || r['Funding Provided'] || r['Funding?'] || r['Funding (Yes/No)'] || r['Funding'] || '',
+          'Funding Type': r['Funding Type'] || r['Type of Funding'] || r['Funding Types'] || '',
+          'Portfolio Enterprises': r['Portfolio Enterprises'] || r['Portfolio'] || r['Portfolio Companies'] || '',
+          Facebook: r.Facebook || r['Facebook Page'] || r['Facebook URL'] || '',
+          LinkedIn: r.LinkedIn || r['LinkedIn Page'] || r['LinkedIn URL'] || r['LinkedIn'] || '',
+          ContactLink: computedContactLink
+        };
+      });
 
       mapSheet=s2.map(r=>({
         ESO:r.ESO||r['ESO Name']||r['Name']||'',
